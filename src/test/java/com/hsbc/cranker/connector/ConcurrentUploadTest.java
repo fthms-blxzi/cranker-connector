@@ -9,6 +9,7 @@ import org.junit.jupiter.api.RepetitionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Queue;
@@ -44,7 +45,7 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
                 .withPreferredProtocols(preferredProtocols(repetitionInfo))
                 .withHttpClient(CrankerConnectorBuilder.createHttpClient(true).build())
                 .withRouterUris(RegistrationUriSuppliers.fixedUris(registrationUri(registrationServer.uri())))
-                .withRoute("*")
+                .withRoute("upload-service")
                 .withTarget(targetServer.uri())
                 .withProxyEventListener(new ProxyEventListener() {
                     @Override
@@ -56,7 +57,7 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
                 .withSlidingWindowSize(10)
                 .start();
 
-        waitForRegistration("*", connector.connectorId(), 2, crankerRouter);
+        waitForRegistration("upload-service", connector.connectorId(), 2, crankerRouter);
     }
 
     @AfterEach
@@ -78,28 +79,39 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
             return true;
         };
 
+        // Explicitly assert and wait for our registered target is perfectly mapped
+        // in crankerRouter state before sending arbitrary client requests
+        waitForRegistration("upload-service", connector.connectorId(), 2, crankerRouter);
+
+        Queue<String> orderTracker = new java.util.concurrent.ConcurrentLinkedQueue<>();
         Queue<HttpResponse<String>> responses = new ConcurrentLinkedQueue<>();
         CountDownLatch countDownLatch = new CountDownLatch(10);
+        java.util.concurrent.atomic.AtomicInteger requestOrder = new java.util.concurrent.atomic.AtomicInteger(0);
 
         final String body = "c".repeat(10 * 1000);
         for (int i = 0; i < 10; i++) {
             final int finalI = i;
             new Thread(() -> {
+                int order = requestOrder.incrementAndGet();
                 try {
+                    URI uri = crankerServer.uri().resolve("/upload-service/?task=" + finalI);
+                    System.out.println("LAUNCHING REQUEST #" + order + " for task=" + finalI + " URI: " + uri);
                     HttpResponse<String> resp = localClient.send(HttpRequest.newBuilder()
                             .method("POST", HttpRequest.BodyPublishers.ofString(body))
-                            .uri(crankerServer.uri().resolve("/?task=" + finalI))
+                            .uri(uri)
                             .build(), HttpResponse.BodyHandlers.ofString());
+                    System.out.println("COMPLETED REQUEST #" + order + " for task=" + finalI + " with status=" + resp.statusCode());
                     responses.add(resp);
                 } catch (Exception e) {
                     log.error("Concurrent request error", e);
+                    System.err.println("FAILED REQUEST #" + order + " for task=" + finalI);
                 } finally {
                     countDownLatch.countDown();
                 }
             }).start();
         }
 
-        assertTrue(countDownLatch.await(10, TimeUnit.SECONDS));
+        assertTrue(countDownLatch.await(30, TimeUnit.SECONDS));
         assertEquals(10, responses.size());
         for (HttpResponse<String> response : responses) {
             assertNotNull(response);

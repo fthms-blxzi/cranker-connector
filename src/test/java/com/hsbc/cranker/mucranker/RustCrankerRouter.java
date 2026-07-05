@@ -6,17 +6,24 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.net.InetAddress;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class RustCrankerRouter implements CrankerRouter {
+
+    private static int lastAssignedPort = 0;
 
     private final Process process;
     private final int regPort;
@@ -38,17 +45,34 @@ public class RustCrankerRouter implements CrankerRouter {
             List<String> supportedCrankerProtocol,
             java.util.function.Function<io.muserver.MuRequest, String> clientIpProvider
     ) {
-        this.regPort = findFreePort();
-        this.visitPort = findFreePort();
+        int portToUse = lastAssignedPort;
+        if (portToUse == 0 || !isPortFree(portToUse)) {
+            portToUse = findFreePort();
+        }
+        lastAssignedPort = portToUse;
+        this.regPort = portToUse;
+        this.visitPort = this.regPort;
         this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(java.time.Duration.ofMillis(2000))
-                .build();
+            .connectTimeout(java.time.Duration.ofMillis(2000))
+            .build();
 
         Process proc = null;
         try {
             String envExe = System.getenv("RUST_ROUTER_SERVER_EXE");
             File exe = envExe != null ? new File(envExe) : null;
             if (exe == null || !exe.exists()) {
+                exe = new File("../scr-axum-cranker-router/target/debug/unified_router_server.exe");
+            }
+            if (!exe.exists()) {
+                exe = new File("../scr-axum-cranker-router/target/debug/unified_router_server");
+            }
+            if (!exe.exists()) {
+                exe = new File("../scr-axum-cranker-router/target/release/unified_router_server.exe");
+            }
+            if (!exe.exists()) {
+                exe = new File("../scr-axum-cranker-router/target/release/unified_router_server");
+            }
+            if (!exe.exists()) {
                 exe = new File("../scr-axum-cranker-router/target/debug/router_server.exe");
             }
             if (!exe.exists()) {
@@ -67,7 +91,7 @@ public class RustCrankerRouter implements CrankerRouter {
                 exe = new File("../scr-axum-cranker-router/target/release/examples/router_server.exe");
             }
             if (!exe.exists()) {
-                throw new IllegalStateException("Rust router_server binary not found. Please specify RUST_ROUTER_SERVER_EXE or run 'cargo build --bin router_server'");
+                throw new IllegalStateException("Rust router_server/unified_router_server binary not found. Please specify RUST_ROUTER_SERVER_EXE or run 'cargo build --bin unified_router_server'");
             }
 
             List<String> cmd = new ArrayList<>();
@@ -245,8 +269,23 @@ public class RustCrankerRouter implements CrankerRouter {
 
     @Override
     public void stop() {
-        if (process != null) {
-            process.destroy();
+        if(process != null) {
+            // 1. Handle all downstream descendant processes
+            process.descendants().forEach(handle -> {
+                if (handle.isAlive()) {
+                    handle.destroy(); // Request graceful termination
+                    // Optional: Forcefully kill if it doesn't respond quickly
+                    try {
+                        Thread.sleep(100);
+                        if (handle.isAlive()) {
+                            handle.destroyForcibly();
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            });
+            process.destroyForcibly();
             try {
                 process.waitFor(5, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
@@ -321,6 +360,14 @@ public class RustCrankerRouter implements CrankerRouter {
                 return darkHosts().stream().filter(h -> h.address().equals(address)).findFirst();
             }
         };
+    }
+
+    private static boolean isPortFree(int port) {
+        try (ServerSocket s = new ServerSocket(port)) {
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private static int findFreePort() {

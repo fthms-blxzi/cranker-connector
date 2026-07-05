@@ -24,6 +24,8 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static scaffolding.AssertUtils.assertEventually;
 
+import static scaffolding.Action.swallowException;
+
 public class BaseEndToEndTest {
 
     protected final HttpClient testClient = HttpUtils.createHttpClientBuilder(true).build();
@@ -50,11 +52,21 @@ public class BaseEndToEndTest {
     protected MuServer crankerServer = startCrankerServer(0);
 
     protected MuServer startCrankerServer(int port) {
-        return scaffolding.TestServerBuilder.httpsServer().withHttpsPort(port).addHandler(crankerRouter.createHttpHandler()).start();
+        boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+        if (isRust) {
+            return scaffolding.TestServerBuilder.httpServer().withHttpPort(port).addHandler(crankerRouter.createHttpHandler()).start();
+        } else {
+            return scaffolding.TestServerBuilder.httpsServer().withHttpsPort(port).addHandler(crankerRouter.createHttpHandler()).start();
+        }
     }
 
     protected MuServer startRegistrationServer(int port) {
-        return scaffolding.TestServerBuilder.httpsServer().withHttpsPort(port).addHandler(crankerRouter.createRegistrationHandler()).start();
+        boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+        if (isRust) {
+            return scaffolding.TestServerBuilder.httpServer().withHttpPort(port).addHandler(crankerRouter.createRegistrationHandler()).start();
+        } else {
+            return scaffolding.TestServerBuilder.httpsServer().withHttpsPort(port).addHandler(crankerRouter.createRegistrationHandler()).start();
+        }
     }
 
     protected static URI registrationUri(URI routerUri) {
@@ -124,9 +136,19 @@ public class BaseEndToEndTest {
 
     @AfterEach
     public void stopServers() {
-        crankerServer.stop();
-        registrationServer.stop();
-        crankerRouter.stop();
+        if (crankerServer != null) {
+            swallowException(crankerServer::stop);
+        }
+        if (registrationServer != null) {
+            swallowException(registrationServer::stop);
+        }
+        if (crankerRouter != null) {
+            swallowException(crankerRouter::stop);
+        }
+        boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+        if(isRust){
+            try { Thread.sleep(300); } catch (Exception ignored) {}
+        }
     }
 
 }

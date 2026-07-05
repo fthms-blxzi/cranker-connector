@@ -1,21 +1,15 @@
 package scaffolding;
 
+import com.hsbc.cranker.mucranker.RustCrankerRouter;
 import io.muserver.MuHandler;
 import io.muserver.MuHandlerBuilder;
-import io.muserver.RouteHandler;
 import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
-import com.hsbc.cranker.mucranker.RustCrankerRouter;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import io.muserver.RouteHandler;
 
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.net.ServerSocket;
-import java.net.Socket;
 import java.net.URI;
 import java.util.concurrent.TimeUnit;
 
@@ -94,8 +88,8 @@ public class TestServerBuilder {
     public MuServer start() {
         boolean isRustMode = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
         if (isRustMode && (rustRouterForReg != null || rustRouterForVisit != null)) {
-            // In Rust mode the PortUnifiedProxy speaks plain HTTP to the Java server,
-            // so ensure the builder also opens an HTTP port.
+            // In Rust mode we direct traffic directly to the Rust ports
+            // without starting any JVM-side TCP proxy
             builder.withHttpPort(0);
         }
         MuServer realServer = builder.start();
@@ -103,8 +97,14 @@ public class TestServerBuilder {
             try {
                 int regPort = rustRouterForReg != null ? rustRouterForReg.getRegPort() : rustRouterForVisit.getVisitPort();
                 int visitPort = rustRouterForVisit != null ? rustRouterForVisit.getVisitPort() : rustRouterForReg.getRegPort();
-                int realServerPort = realServer.httpUri() != null ? realServer.httpUri().getPort() : realServer.uri().getPort();
-                PortUnifiedProxy proxy = new PortUnifiedProxy(requestedPort, realServerPort, regPort, visitPort);
+                final int targetRustPort;
+                if (rustRouterForReg != null && rustRouterForVisit != null) {
+                    targetRustPort = regPort;
+                } else if (rustRouterForReg != null) {
+                    targetRustPort = regPort;
+                } else {
+                    targetRustPort = visitPort;
+                }
                 return (MuServer) Proxy.newProxyInstance(
                         MuServer.class.getClassLoader(),
                         new Class<?>[]{MuServer.class},
@@ -113,9 +113,8 @@ public class TestServerBuilder {
                             public Object invoke(Object proxyInstance, Method method, Object[] args) throws Throwable {
                                 String methodName = method.getName();
                                 if (methodName.equals("uri") || methodName.equals("httpUri") || methodName.equals("httpsUri")) {
-                                    return URI.create("http://127.0.0.1:" + proxy.getPort());
+                                    return URI.create("http://127.0.0.1:" + targetRustPort);
                                 } else if (methodName.equals("stop")) {
-                                    proxy.stop();
                                     return method.invoke(realServer, args);
                                 }
                                 return method.invoke(realServer, args);
@@ -123,108 +122,9 @@ public class TestServerBuilder {
                         }
                 );
             } catch (Exception e) {
-                throw new RuntimeException("Failed to start unified port proxy", e);
+                throw new RuntimeException("Failed to delegate to unified rust router server", e);
             }
         }
         return realServer;
-    }
-
-    private static class PortUnifiedProxy {
-        private final ServerSocket serverSocket;
-        private final int realServerPort;
-        private final int regPort;
-        private final int visitPort;
-        private final Thread thread;
-        private volatile boolean running = true;
-        private final Set<Socket> activeSockets = ConcurrentHashMap.newKeySet();
-
-        public PortUnifiedProxy(int requestedPort, int realServerPort, int regPort, int visitPort) throws Exception {
-            this.serverSocket = new ServerSocket(requestedPort);
-            this.realServerPort = realServerPort;
-            this.regPort = regPort;
-            this.visitPort = visitPort;
-            this.thread = new Thread(this::run);
-            this.thread.setDaemon(true);
-            this.thread.start();
-        }
-
-        public int getPort() {
-            return serverSocket.getLocalPort();
-        }
-
-        public void stop() {
-            running = false;
-            try { serverSocket.close(); } catch (Exception ignored) {}
-            for (Socket s : activeSockets) {
-                try { s.close(); } catch (Exception ignored) {}
-            }
-            activeSockets.clear();
-        }
-
-        private void run() {
-            while (running) {
-                try {
-                    Socket clientSocket = serverSocket.accept();
-                    activeSockets.add(clientSocket);
-                    new Thread(() -> handle(clientSocket)).start();
-                } catch (Exception e) {
-                    // ignore
-                }
-            }
-        }
-
-        private void handle(Socket clientSocket) {
-            try {
-                clientSocket.setTcpNoDelay(true);
-                InputStream in = clientSocket.getInputStream();
-                byte[] buffer = new byte[8192];
-                int read = in.read(buffer);
-                if (read <= 0) {
-                    activeSockets.remove(clientSocket);
-                    clientSocket.close();
-                    return;
-                }
-                String headers = new String(buffer, 0, read, java.nio.charset.StandardCharsets.US_ASCII);
-                int targetPort = visitPort;
-                if (headers.contains("/register") || headers.contains("/deregister") || headers.contains("/dark-mode")) {
-                    targetPort = regPort;
-                } else if (headers.contains("/health")) {
-                    targetPort = realServerPort;
-                }
-                System.out.println("DEBUG PROXY: targetPort=" + targetPort + " for " + headers.substring(0, Math.min(100, headers.length())).replace("\r", "\\r").replace("\n", "\\n"));
-                Socket targetSocket = new Socket("127.0.0.1", targetPort);
-                activeSockets.add(targetSocket);
-                targetSocket.setTcpNoDelay(true);
-                OutputStream out = targetSocket.getOutputStream();
-                out.write(buffer, 0, read);
-                out.flush();
-
-                Thread t1 = new Thread(() -> copy(clientSocket, targetSocket));
-                Thread t2 = new Thread(() -> copy(targetSocket, clientSocket));
-                t1.start();
-                t2.start();
-            } catch (Exception e) {
-                activeSockets.remove(clientSocket);
-                try { clientSocket.close(); } catch (Exception ignored) {}
-            }
-        }
-
-        private void copy(Socket source, Socket dest) {
-            try (InputStream in = source.getInputStream();
-                 OutputStream out = dest.getOutputStream()) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) != -1) {
-                    out.write(buf, 0, n);
-                    out.flush();
-                }
-            } catch (Exception ignored) {
-            } finally {
-                activeSockets.remove(source);
-                activeSockets.remove(dest);
-                try { source.close(); } catch (Exception ignored) {}
-                try { dest.close(); } catch (Exception ignored) {}
-            }
-        }
     }
 }
