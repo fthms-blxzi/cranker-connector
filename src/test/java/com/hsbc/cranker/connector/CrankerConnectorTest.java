@@ -145,9 +145,7 @@ public class CrankerConnectorTest extends BaseEndToEndTest {
         assertThat(resp.body(), containsString("by="));
         assertThat(resp.body(), containsString("for="));
         assertThat(resp.body(), containsString("host="));
-        if (!Boolean.getBoolean("cranker.router.rust")) {
-            assertThat(resp.body(), containsString("proto="));
-        }
+        assertThat(resp.body(), containsString("proto="));
     }
 
     @RepeatedTest(3)

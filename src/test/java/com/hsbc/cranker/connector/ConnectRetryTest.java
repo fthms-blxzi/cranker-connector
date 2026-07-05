@@ -29,7 +29,6 @@ import static scaffolding.Action.swallowException;
 import static scaffolding.AssertUtils.assertEventually;
 import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
-@org.junit.jupiter.api.condition.DisabledIfSystemProperty(named = "cranker.router.rust", matches = "true")
 public class ConnectRetryTest {
 
     protected final HttpClient testClient = HttpUtils.createHttpClientBuilder(true).build();
@@ -69,14 +68,14 @@ public class ConnectRetryTest {
         String body = randomAsciiStringOfLength(100);
         HttpResponse<String> resp = testClient.send(HttpRequest.newBuilder()
             .method("POST", HttpRequest.BodyPublishers.ofString(body))
-            .uri(router.uri())
+            .uri(router.uri().resolve("/something"))
             .build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(body, resp.body());
 
         int originalPort = router.uri().getPort();
         router.stop();
 
-        assertThrows(IOException.class, () -> testClient.send(HttpRequest.newBuilder().uri(router.uri()).build(), HttpResponse.BodyHandlers.ofString()));
+        assertThrows(IOException.class, () -> testClient.send(HttpRequest.newBuilder().uri(router.uri().resolve("/something")).build(), HttpResponse.BodyHandlers.ofString()));
 
         Thread.sleep(2000);
 
@@ -96,7 +95,7 @@ public class ConnectRetryTest {
         assertEventually(() -> {
             HttpResponse<String> newResp = testClient.send(HttpRequest.newBuilder()
                 .method("POST", HttpRequest.BodyPublishers.ofString(newBody))
-                .uri(router.uri())
+                .uri(router.uri().resolve("/something"))
                 .build(), HttpResponse.BodyHandlers.ofString());
             return newResp.body();
         }, is(newBody));
@@ -154,7 +153,7 @@ public class ConnectRetryTest {
         crankerRouter.stop();
         router.stop();
 
-        assertThrows(IOException.class, () -> testClient.send(HttpRequest.newBuilder().uri(router.uri()).build(), HttpResponse.BodyHandlers.ofString()));
+        assertThrows(IOException.class, () -> testClient.send(HttpRequest.newBuilder().uri(router.uri().resolve("/something")).build(), HttpResponse.BodyHandlers.ofString()));
 
         assertEventually(exceptionCount::get, greaterThan(0));
 
@@ -177,7 +176,7 @@ public class ConnectRetryTest {
         String body = "hello";
         HttpResponse<String> resp = testClient.send(HttpRequest.newBuilder()
             .method("POST", HttpRequest.BodyPublishers.ofString(body))
-            .uri(router.uri())
+            .uri(router.uri().resolve("/something"))
             .build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(200, resp.statusCode());
         assertEquals(body, resp.body());

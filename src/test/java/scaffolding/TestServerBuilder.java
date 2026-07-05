@@ -25,6 +25,8 @@ public class TestServerBuilder {
     private RustCrankerRouter rustRouterForReg = null;
     private RustCrankerRouter rustRouterForVisit = null;
 
+    private int requestedPort = 0;
+
     private TestServerBuilder(MuServerBuilder builder) {
         this.builder = builder;
     }
@@ -58,11 +60,13 @@ public class TestServerBuilder {
     }
 
     public TestServerBuilder withHttpPort(int port) {
+        this.requestedPort = port;
         builder.withHttpPort(port);
         return this;
     }
 
     public TestServerBuilder withHttpsPort(int port) {
+        this.requestedPort = port;
         builder.withHttpPort(port);
         return this;
     }
@@ -100,7 +104,7 @@ public class TestServerBuilder {
                 int regPort = rustRouterForReg != null ? rustRouterForReg.getRegPort() : rustRouterForVisit.getVisitPort();
                 int visitPort = rustRouterForVisit != null ? rustRouterForVisit.getVisitPort() : rustRouterForReg.getRegPort();
                 int realServerPort = realServer.httpUri() != null ? realServer.httpUri().getPort() : realServer.uri().getPort();
-                PortUnifiedProxy proxy = new PortUnifiedProxy(realServerPort, regPort, visitPort);
+                PortUnifiedProxy proxy = new PortUnifiedProxy(requestedPort, realServerPort, regPort, visitPort);
                 return (MuServer) Proxy.newProxyInstance(
                         MuServer.class.getClassLoader(),
                         new Class<?>[]{MuServer.class},
@@ -134,8 +138,8 @@ public class TestServerBuilder {
         private volatile boolean running = true;
         private final Set<Socket> activeSockets = ConcurrentHashMap.newKeySet();
 
-        public PortUnifiedProxy(int realServerPort, int regPort, int visitPort) throws Exception {
-            this.serverSocket = new ServerSocket(0);
+        public PortUnifiedProxy(int requestedPort, int realServerPort, int regPort, int visitPort) throws Exception {
+            this.serverSocket = new ServerSocket(requestedPort);
             this.realServerPort = realServerPort;
             this.regPort = regPort;
             this.visitPort = visitPort;

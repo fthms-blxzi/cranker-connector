@@ -21,7 +21,6 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.Action.swallowException;
 
-@org.junit.jupiter.api.condition.DisabledIfSystemProperty(named = "cranker.router.rust", matches = "true")
 public class ServerSentEventTest extends BaseEndToEndTest {
 
     private SseTestClient client;

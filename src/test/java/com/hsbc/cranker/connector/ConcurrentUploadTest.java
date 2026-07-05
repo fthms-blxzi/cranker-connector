@@ -19,7 +19,6 @@ import java.util.concurrent.TimeUnit;
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.junit.jupiter.api.Assertions.*;
 
-@org.junit.jupiter.api.condition.DisabledIfSystemProperty(named = "cranker.router.rust", matches = "true")
 public class ConcurrentUploadTest extends BaseEndToEndTest {
 
     private static final Logger log = LoggerFactory.getLogger(ConcurrentUploadTest.class);
@@ -27,35 +26,47 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
     private volatile MuHandler handler = (request, response) -> false;
 
     protected MuServer targetServer = httpServer()
-        .addHandler((request, response) -> handler.handle(request, response))
-        .start();
+            .addHandler((request, response) -> handler.handle(request, response))
+            .start();
 
     private CrankerConnector connector;
+    private java.util.concurrent.ExecutorService clientExecutor;
+    private java.net.http.HttpClient localClient;
 
     @BeforeEach
     void setUp(RepetitionInfo repetitionInfo) {
-        connector = CrankerConnectorBuilder.connector()
-            .withPreferredProtocols(preferredProtocols(repetitionInfo))
-            .withHttpClient(CrankerConnectorBuilder.createHttpClient(true).build())
-            .withRouterUris(RegistrationUriSuppliers.fixedUris(registrationUri(registrationServer.uri())))
-            .withRoute("*")
-            .withTarget(targetServer.uri())
-            .withProxyEventListener(new ProxyEventListener() {
-                @Override
-                public void onProxyError(HttpRequest request, Throwable error) {
-                    log.warn("onProxyError, request=" + request, error);
-                }
-            })
-            .withComponentName("cranker-connector-unit-test")
-            .start();
+        clientExecutor = java.util.concurrent.Executors.newFixedThreadPool(20);
+        localClient = HttpUtils.createHttpClientBuilder(true)
+                .executor(clientExecutor)
+                .build();
 
-        waitForRegistration("*", connector.connectorId(),2, crankerRouter);
+        connector = CrankerConnectorBuilder.connector()
+                .withPreferredProtocols(preferredProtocols(repetitionInfo))
+                .withHttpClient(CrankerConnectorBuilder.createHttpClient(true).build())
+                .withRouterUris(RegistrationUriSuppliers.fixedUris(registrationUri(registrationServer.uri())))
+                .withRoute("*")
+                .withTarget(targetServer.uri())
+                .withProxyEventListener(new ProxyEventListener() {
+                    @Override
+                    public void onProxyError(HttpRequest request, Throwable error) {
+                        log.warn("onProxyError, request=" + request, error);
+                    }
+                })
+                .withComponentName("cranker-connector-unit-test")
+                .withSlidingWindowSize(10)
+                .start();
+
+        waitForRegistration("*", connector.connectorId(), 2, crankerRouter);
     }
 
     @AfterEach
     public void stop() throws Exception {
-        if (connector != null) assertTrue(connector.stop(10, TimeUnit.SECONDS));
-        if (targetServer != null) targetServer.stop();
+        if (connector != null)
+            assertTrue(connector.stop(10, TimeUnit.SECONDS));
+        if (targetServer != null)
+            targetServer.stop();
+        if (clientExecutor != null)
+            clientExecutor.shutdownNow();
     }
 
     @RepeatedTest(3)
@@ -71,26 +82,26 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
         CountDownLatch countDownLatch = new CountDownLatch(10);
 
         final String body = "c".repeat(10 * 1000);
-        for(int i = 0; i < 10; i++) {
+        for (int i = 0; i < 10; i++) {
             final int finalI = i;
             new Thread(() -> {
                 try {
-                    HttpResponse<String> resp = testClient.send(HttpRequest.newBuilder()
-                        .method("POST", HttpRequest.BodyPublishers.ofString(body))
-                        .uri(crankerServer.uri().resolve("/?task=" + finalI))
-                        .build(), HttpResponse.BodyHandlers.ofString());
+                    HttpResponse<String> resp = localClient.send(HttpRequest.newBuilder()
+                            .method("POST", HttpRequest.BodyPublishers.ofString(body))
+                            .uri(crankerServer.uri().resolve("/?task=" + finalI))
+                            .build(), HttpResponse.BodyHandlers.ofString());
                     responses.add(resp);
-                    countDownLatch.countDown();
                 } catch (Exception e) {
                     log.error("Concurrent request error", e);
-                    responses.add(null);
+                } finally {
+                    countDownLatch.countDown();
                 }
             }).start();
         }
 
         assertTrue(countDownLatch.await(10, TimeUnit.SECONDS));
         assertEquals(10, responses.size());
-        for (HttpResponse<String> response: responses) {
+        for (HttpResponse<String> response : responses) {
             assertNotNull(response);
             assertEquals(200, response.statusCode());
             assertEquals(body, response.body());
