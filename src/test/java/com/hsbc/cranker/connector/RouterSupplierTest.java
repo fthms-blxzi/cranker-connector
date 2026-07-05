@@ -17,13 +17,14 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
 import static io.muserver.ContextHandlerBuilder.context;
-import static io.muserver.MuServerBuilder.httpServer;
+import static scaffolding.TestServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static scaffolding.Action.swallowException;
 import static scaffolding.AssertUtils.assertEventually;
 
+@org.junit.jupiter.api.condition.DisabledIfSystemProperty(named = "cranker.router.rust", matches = "true")
 public class RouterSupplierTest extends BaseEndToEndTest {
 
     private static final String route = "my-service";

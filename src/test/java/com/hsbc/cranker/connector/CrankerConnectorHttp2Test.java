@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
 import static com.hsbc.cranker.connector.BaseEndToEndTest.preferredProtocols;
 import static com.hsbc.cranker.connector.BaseEndToEndTest.startConnectorAndWaitForRegistration;
 import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
-import static io.muserver.MuServerBuilder.httpsServer;
+import static scaffolding.TestServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static scaffolding.Action.swallowException;

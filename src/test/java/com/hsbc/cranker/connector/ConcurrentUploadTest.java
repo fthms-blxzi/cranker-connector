@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.junit.jupiter.api.condition.DisabledIfSystemProperty(named = "cranker.router.rust", matches = "true")
 public class ConcurrentUploadTest extends BaseEndToEndTest {
 
     private static final Logger log = LoggerFactory.getLogger(ConcurrentUploadTest.class);

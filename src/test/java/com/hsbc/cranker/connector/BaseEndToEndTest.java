@@ -2,6 +2,7 @@ package com.hsbc.cranker.connector;
 
 import com.hsbc.cranker.mucranker.CrankerRouter;
 import com.hsbc.cranker.mucranker.CrankerRouterBuilder;
+import com.hsbc.cranker.mucranker.RustCrankerRouter;
 import io.muserver.MuServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.RepetitionInfo;
@@ -27,19 +28,33 @@ public class BaseEndToEndTest {
 
     protected final HttpClient testClient = HttpUtils.createHttpClientBuilder(true).build();
 
-    protected CrankerRouter crankerRouter = CrankerRouterBuilder
-        .crankerRouter()
-        .withSupportedCrankerProtocols(List.of("cranker_3.0", "cranker_1.0"))
-        .start();
+    protected CrankerRouter crankerRouter = buildRouter();
+
+    private static CrankerRouter buildRouter() {
+        boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+        if (isRust) {
+            return new RustCrankerRouter(
+                    null, false, false, "cranker-connector-test", java.util.Collections.emptySet(),
+                    10000, 2000, 30000, 60000, java.util.Collections.emptyList(), null,
+                    List.of("cranker_3.0", "cranker_1.0"), null
+            );
+        } else {
+            return CrankerRouterBuilder
+                .crankerRouter()
+                .withSupportedCrankerProtocols(List.of("cranker_3.0", "cranker_1.0"))
+                .start();
+        }
+    }
+
     protected MuServer registrationServer = startRegistrationServer(0);
     protected MuServer crankerServer = startCrankerServer(0);
 
     protected MuServer startCrankerServer(int port) {
-        return muServer().withHttpsPort(port).addHandler(crankerRouter.createHttpHandler()).start();
+        return scaffolding.TestServerBuilder.httpsServer().withHttpsPort(port).addHandler(crankerRouter.createHttpHandler()).start();
     }
 
     protected MuServer startRegistrationServer(int port) {
-        return muServer().withHttpsPort(port).addHandler(crankerRouter.createRegistrationHandler()).start();
+        return scaffolding.TestServerBuilder.httpsServer().withHttpsPort(port).addHandler(crankerRouter.createRegistrationHandler()).start();
     }
 
     protected static URI registrationUri(URI routerUri) {

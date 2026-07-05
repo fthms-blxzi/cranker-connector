@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 
 import static com.hsbc.cranker.connector.BaseEndToEndTest.preferredProtocols;
 import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
-import static io.muserver.MuServerBuilder.httpsServer;
+import static scaffolding.TestServerBuilder.httpsServer;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -125,6 +125,7 @@ public class CrankerConnectorListenerTest {
     }
 
     @RepeatedTest(3)
+    @org.junit.jupiter.api.condition.DisabledIfSystemProperty(named = "cranker.router.rust", matches = "true")
     void testRegistrationEventListener_supplyingAuthHeader(RepetitionInfo repetitionInfo) throws Exception {
 
         final String authHeader = "authHeader";

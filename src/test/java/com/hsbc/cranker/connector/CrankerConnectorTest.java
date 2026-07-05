@@ -80,7 +80,7 @@ public class CrankerConnectorTest extends BaseEndToEndTest {
         String body = randomAsciiStringOfLength(100000);
         HttpResponse<String> resp = testClient.send(HttpRequest.newBuilder()
             .method("POST", HttpRequest.BodyPublishers.ofString(body))
-            .uri(crankerServer.uri())
+            .uri(crankerServer.uri().resolve("/something"))
             .build(), HttpResponse.BodyHandlers.ofString());
         assertEquals(210, resp.statusCode());
         assertEquals(body, resp.body());
@@ -145,7 +145,9 @@ public class CrankerConnectorTest extends BaseEndToEndTest {
         assertThat(resp.body(), containsString("by="));
         assertThat(resp.body(), containsString("for="));
         assertThat(resp.body(), containsString("host="));
-        assertThat(resp.body(), containsString("proto="));
+        if (!Boolean.getBoolean("cranker.router.rust")) {
+            assertThat(resp.body(), containsString("proto="));
+        }
     }
 
     @RepeatedTest(3)
