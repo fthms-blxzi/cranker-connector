@@ -1,8 +1,5 @@
 package com.hsbc.cranker.connector;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -12,8 +9,11 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -30,13 +30,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * A single connection between a connector and a router in protocol cranker_v3 implementation
  */
 public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
-
-    private static final Logger log = LoggerFactory.getLogger(ConnectorSocketV3.class);
 
     static final byte MESSAGE_TYPE_DATA = 0;
     static final byte MESSAGE_TYPE_HEADER = 1;
@@ -139,32 +138,38 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
             .replace("https://", "wss://")
         ).resolve(protocolRequest.dest);
 
+        HttpRequest.Builder rb = HttpRequest.newBuilder()
+            .GET()
+            .uri(targetURI.resolve(protocolRequest.dest));
+
         WebSocket.Builder wsBuilder = httpClient.newWebSocketBuilder();
-        for (String h : protocolRequest.headers) {
-            int colon = h.indexOf(":");
-            if (colon > 0) {
-                String name = h.substring(0, colon).trim();
-                String value = h.substring(colon + 1).trim();
-                if (!RESTRICTED_WEBSOCKET_REQUEST_HEADERS.contains(name.toLowerCase())) {
-                    try {
-                        wsBuilder.header(name, value);
-                    } catch (IllegalArgumentException ignored) {
-                    }
+        for (var h : protocolRequest.headerEntryList()) {
+            String name = h.getKey();
+            String value = h.getValue();
+            if (!RESTRICTED_WEBSOCKET_REQUEST_HEADERS.contains(name.toLowerCase())) {
+                try {
+                    wsBuilder.header(name, value);
+                    rb.header(name, value);
+                } catch (IllegalArgumentException ignored) {
                 }
             }
         }
 
-        var tgtWsListener = getTargetWebsocketListener(context);
+        HttpRequest httpReq = rb.build();
+        final HttpRequest requestToTarget = proxyEventListener.beforeProxyToTarget(httpReq, rb);
+        context.request = requestToTarget;
+
+        var tgtWsListener = getTargetWebSocketListener(context);
 
         wsBuilder.buildAsync(targetWsUri, tgtWsListener).whenComplete((targetWs, throwable) -> {
             if (throwable != null) {
-                log.error("Failed to build target WS connection for request id: {}", context.requestId, throwable);
+                proxyEventListener.onProxyError(context.request, throwable);
                 resetStream(context.requestId, 1011, "Failed to connect to target WS: " + throwable.getMessage());
             }
         });
     }
 
-    private WebSocket.Listener getTargetWebsocketListener(RequestContext context) {
+    private WebSocket.Listener getTargetWebSocketListener(RequestContext context) {
         return new WebSocket.Listener() {
             @Override
             public void onOpen(WebSocket targetWs) {
@@ -179,16 +184,24 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
                     protocolResponse.withHeader("Sec-WebSocket-Protocol", targetWs.getSubprotocol());
                 }
 
+                int headerBytes = 0;
                 String headerText = protocolResponse.build();
                 final ByteBuffer[] headerMessages = headerMessages(context.requestId, true, false, headerText);
                 CompletableFuture<WebSocket> headerFuture = sendBinary(headerMessages[0], true);
                 for (int i = 1; i < headerMessages.length; i++) {
                     final ByteBuffer headerMessage = headerMessages[i];
+                    headerBytes += headerMessage.remaining() - 6;
                     headerFuture = headerFuture.thenCompose(ws -> sendBinary(headerMessage, true));
                 }
+                final int finalHeaderBytes = headerBytes;
+                context.sendingBytes(headerBytes);
                 headerFuture.whenComplete((ws, err) -> {
                     if (err != null) {
+                        proxyEventListener.onProxyError(context.request, err);
+                        targetWs.sendClose(1011, "failed to send handshake response headers to router");
                         resetStream(context.requestId, 1011, "failed to send WS handshake response headers: " + err.getMessage());
+                    } else {
+                        context.sentBytes(finalHeaderBytes);
                     }
                 });
                 targetWs.request(1);
@@ -237,25 +250,61 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
 
             @Override
             public void onError(WebSocket targetWs, Throwable error) {
-                log.info("Target connection error for request id: {}", context.requestId, error);
+                proxyEventListener.onProxyError(context.request, error);
                 resetStream(context.requestId, 1011, "Target ws connection error: " + error.getMessage());
             }
         };
     }
 
     private static boolean checkIsWebSocketUpgrade(CrankerRequest protocolRequest) {
-        for (String h : protocolRequest.headers) {
-            int colon = h.indexOf(":");
-            if (colon > 0) {
-                String name = h.substring(0, colon).trim();
-                String value = h.substring(colon + 1).trim();
-                if (name.equalsIgnoreCase("upgrade") && value.equalsIgnoreCase("websocket")) {
-                    return true;
-                }
-            }
+        if (!"GET".equals(protocolRequest.httpMethod)) return false;
+        try {
+            var ignored = URI.create(protocolRequest.dest);
+        } catch (Exception ignored) {
+            return false;
         }
-        return false;
+
+        var headerEntryList = protocolRequest.headerEntryList();
+
+        boolean hasHost = headerEntryList.stream().anyMatch(e ->
+            "Host".equalsIgnoreCase(e.getKey())
+                && !e.getValue().isEmpty()
+        );
+        if (!hasHost) return false;
+
+        boolean hasWebSocketInUpgrade = headerEntryList.stream().anyMatch(e ->
+            "Upgrade".equalsIgnoreCase(e.getKey())
+                && e.getValue().toLowerCase(Locale.US).contains("websocket")
+        );
+        if (!hasWebSocketInUpgrade) return false;
+
+        boolean hasUpgradeInConnectionHeader = headerEntryList.stream().anyMatch(e ->
+            "Connection".equalsIgnoreCase(e.getKey())
+                && e.getValue().toLowerCase(Locale.US).contains("upgrade")
+        );
+        if (!hasUpgradeInConnectionHeader) return false;
+
+        boolean hasSecWebSocketVersion
+            = headerEntryList.stream().anyMatch(e ->
+            "Sec-WebSocket-Version".equalsIgnoreCase(e.getKey())
+                && "13".equals(e.getValue())
+        );
+        if (!hasSecWebSocketVersion) return false;
+
+        boolean hasSecWebSocketKey = headerEntryList.stream().anyMatch(e -> {
+            if (!"Sec-WebSocket-Key".equalsIgnoreCase(e.getKey())) return false;
+            if (e.getValue().isEmpty() || e.getValue().length() > 24) return false;
+            try {
+                return 16 == Base64.getDecoder().decode(e.getValue()).length;
+            } catch (Exception ignored) {
+                return false;
+            }
+        });
+        if (!hasSecWebSocketKey) return false;
+
+        return true;
     }
+
 
     /**
      * Calling websocket.sendBinary() will result in exceptions when previous sending action not completed.
@@ -334,17 +383,9 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
     }
 
     private void putHeadersTo(HttpRequest.Builder requestToTarget, CrankerRequest crankerRequest) {
-        for (String line : crankerRequest.headers) {
-            int pos = line.indexOf(':');
-            // this will ignore HTTP/2 pseudo request headers like :method, :path, :authority
-            if (pos > 0) {
-                String header = line.substring(0, pos).trim().toLowerCase();
-                String value = line.substring(pos + 1);
-                if (!HttpUtils.DISALLOWED_REQUEST_HEADERS.contains(header)) {
-                    requestToTarget.header(header, value);
-                }
-            }
-        }
+        crankerRequest.headerEntryList().stream()
+            .filter(h -> !HttpUtils.DISALLOWED_REQUEST_HEADERS.contains(h.getKey()))
+            .forEach(h -> requestToTarget.header(h.getKey(), h.getValue()));
     }
 
     @Override
@@ -408,7 +449,7 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
             return holder.future;
         }
 
-        CompletableFuture<?> releaseByteBuffer = new CompletableFuture<>();;
+        CompletableFuture<?> releaseByteBuffer = new CompletableFuture<>();
         ByteBuffer completedData;
 
         // concatenate previous uncompleted buffers and put them into a new allocated ByteBuffer
@@ -800,12 +841,12 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
         return payload;
     }
 
-    private void handleWebSocketMessage(ByteBuffer completedData, int flags, Integer requestId, CompletableFuture<?> releaseByteBuffer, WebSocket wSocket) {
+    private void handleWebSocketMessage(ByteBuffer completedData, int flags, Integer requestId, CompletableFuture<?> releaseByteBuffer, WebSocket crWs) {
         try {
             RequestContext context = contextMap.get(requestId);
             if (context == null || context.targetWebSocket == null) {
                 releaseByteBuffer.complete(null);
-                wSocket.request(1);
+                crWs.request(1);
                 return;
             }
 
@@ -824,14 +865,14 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
                     String text = StandardCharsets.UTF_8.decode(payload).toString();
                     context.targetWebSocket.sendText(text, isLast).whenComplete((ws, err) -> {
                         releaseByteBuffer.complete(null);
-                        wSocket.request(1);
+                        crWs.request(1);
                     });
                     break;
                 }
                 case WS_OPCODE_BINARY: { // Binary
                     context.targetWebSocket.sendBinary(payload, isLast).whenComplete((ws, err) -> {
                         releaseByteBuffer.complete(null);
-                        wSocket.request(1);
+                        crWs.request(1);
 
                     });
                     break;
@@ -839,7 +880,7 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
                 case WS_OPCODE_PING: { // Ping
                     context.targetWebSocket.sendPing(payload).whenComplete((ws, err) -> {
                         releaseByteBuffer.complete(null);
-                        wSocket.request(1);
+                        crWs.request(1);
 
                     });
                     break;
@@ -847,7 +888,7 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
                 case WS_OPCODE_PONG: { // Ping
                     context.targetWebSocket.sendPong(payload).whenComplete((ws, err) -> {
                         releaseByteBuffer.complete(null);
-                        wSocket.request(1);
+                        crWs.request(1);
 
                     });
                     break;
@@ -857,19 +898,22 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
                     String reason = payload.remaining() > 0 ? StandardCharsets.UTF_8.decode(payload).toString() : "";
                     context.targetWebSocket.sendClose(statusCode, reason).whenComplete((ws, err) -> {
                         releaseByteBuffer.complete(null);
-                        wSocket.request(1);
+                        crWs.request(1);
                     });
                     contextMap.remove(requestId);
                 }
                 default: {
                     releaseByteBuffer.complete(null);
-                    wSocket.request(1);
+                    crWs.request(1);
                 }
             }
-        } catch (Throwable throwable) {
-            log.warn("Error handling wss payload", throwable);
+        } catch (Throwable t) {
+            RequestContext context = contextMap.get(requestId);
+            if (context != null) {
+                proxyEventListener.onProxyError(context.request, t);
+            }
             releaseByteBuffer.complete(null);
-            wSocket.request(1);
+            crWs.request(1);
         }
     }
 
@@ -962,17 +1006,26 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
             this.headers = Arrays.copyOfRange(msgArr, 1, msgArr.length);
         }
 
+        public List<Map.Entry<String, String>> headerEntryList() {
+            return Arrays.stream(headers)
+                .map(h -> Map.entry(h, h.indexOf(":")))
+                .map(e -> e.getValue() <= 0 ? null : Map.entry(
+                    e.getKey().substring(0, e.getValue()).trim(),
+                    e.getKey().substring(e.getValue() + 1).trim()
+                ))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        }
+
         public long bodyLength() {
-            for (String headerLine : headers) {
-                // line sample: "Content-Length:100000"
-                if (headerLine.toLowerCase().startsWith("content-length:")) {
-                    String[] split = headerLine.split(":");
-                    if (split.length == 2) {
-                        return Long.parseLong(split[1].trim());
-                    }
-                }
-            }
-            return -1;
+            return headerEntryList()
+                .stream().filter(h ->
+                    "content-length".equalsIgnoreCase(h.getKey())
+                )
+                .map(Map.Entry::getValue)
+                .map(Long::parseLong)
+                .findFirst()
+                .orElse(-1L);
         }
     }
 

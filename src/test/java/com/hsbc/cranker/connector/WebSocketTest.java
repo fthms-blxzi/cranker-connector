@@ -41,9 +41,11 @@ import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 // @Disabled("Should run after the router alpha version is published")
@@ -253,9 +255,15 @@ public class WebSocketTest {
         URI wsClientUri = URI.create(getCrankedWsUrl() + "/my-ws-service/ws-partial");
         BlockingDeque<String> responseEvents = new LinkedBlockingDeque<>();
         CompletableFuture<Void> clientCloseLatch = new CompletableFuture<>();
+        CompletableFuture<Throwable> clientErrorLatch = new CompletableFuture<>();
 
         CompletableFuture<WebSocket> wsFuture = httpClient.newWebSocketBuilder()
             .buildAsync(wsClientUri, new WebSocket.Listener() {
+                @Override
+                public void onOpen(WebSocket webSocket) {
+                    webSocket.request(16);
+                }
+
                 @Override
                 public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
                     responseEvents.add(data.toString());
@@ -268,21 +276,39 @@ public class WebSocketTest {
                     clientCloseLatch.complete(null);
                     return null;
                 }
+
+                @Override
+                public void onError(WebSocket webSocket, Throwable error) {
+                    clientErrorLatch.complete(error);
+                }
             });
 
         WebSocket clientWs = wsFuture.get(10, TimeUnit.SECONDS);
         assertNotNull(clientWs);
 
-        String partial1 = responseEvents.poll(10, TimeUnit.SECONDS);
-        assertEquals("Partial one", partial1);
+        String expected = "Partial one Partial two Last one";
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+        List<String> actualParts = new ArrayList<>();
+        while (!clientCloseLatch.isDone() && !clientErrorLatch.isDone() && System.nanoTime() < deadline) {
+            long remainingMillis = Math.max(1, TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()));
+            String next = responseEvents.poll(remainingMillis, TimeUnit.MILLISECONDS);
+            if (next != null) {
+                actualParts.add(next);
+            }
+        }
 
-        String partial2 = responseEvents.poll(10, TimeUnit.SECONDS);
-        assertEquals("Partial two", partial2);
+        assertFalse(clientErrorLatch.isDone(), "Client received unexpected websocket error: " + clientErrorLatch.getNow(null));
 
-        String last = responseEvents.poll(10, TimeUnit.SECONDS);
-        assertEquals("Last one", last);
-
-        assertDoesNotThrow(() -> clientCloseLatch.get(5, TimeUnit.SECONDS));
+        int cursor = 0;
+        for (String actualPart : actualParts) {
+            int nextIndex = expected.indexOf(actualPart, cursor);
+            assertTrue(
+                nextIndex>=cursor,
+                "Observed WebSocket text fragment out of order. expectedSequence="  + expected+ ", actualParts=" + actualParts
+            );
+            cursor = nextIndex + actualPart.length();
+        }
+        clientWs.abort();
     }
 
     @Test
