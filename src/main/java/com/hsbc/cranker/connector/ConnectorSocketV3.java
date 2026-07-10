@@ -1,5 +1,8 @@
 package com.hsbc.cranker.connector;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -7,8 +10,22 @@ import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.StringJoiner;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Flow;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -19,10 +36,27 @@ import java.util.function.Function;
  */
 public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
 
+    private static final Logger log = LoggerFactory.getLogger(ConnectorSocketV3.class);
+
     static final byte MESSAGE_TYPE_DATA = 0;
     static final byte MESSAGE_TYPE_HEADER = 1;
     static final byte MESSAGE_TYPE_RST_STREAM = 3;
     static final byte MESSAGE_TYPE_WINDOW_UPDATE = 8;
+    static final byte MESSAGE_TYPE_WEBSOCKET = 10;
+
+    static final byte WS_OPCODE_TEXT = 1;
+    static final byte WS_OPCODE_BINARY = 2;
+    static final byte WS_OPCODE_CLOSE = 8;
+    static final byte WS_OPCODE_PING = 9;
+    static final byte WS_OPCODE_PONG = 10;
+    ;
+
+    static final int WS_FIN_BIT = 0x80;
+    static final int WS_OPCODE_MASK = 0x0F;
+
+    private static final Set<String> RESTRICTED_WEBSOCKET_REQUEST_HEADERS = Set.of(
+        "upgrade", "connection", "sec-websocket-key", "sec-websocket-version", "sec-websocket-extensions", "sec-websocket-accept", "host"
+    );
 
     private volatile ScheduledFuture<?> timeoutTask;
 
@@ -36,6 +70,7 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
     private WebSocket webSocket;
     private volatile State websocketState;
     private final ScheduledExecutorService executor;
+    private final String protocolVersion;
     private ScheduledFuture<?> pingPongTask;
     private final List<BufferHolder> unCompletedBuffers;
 
@@ -44,12 +79,13 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
     private final AtomicBoolean isSending = new AtomicBoolean(false);
 
     ConnectorSocketV3(URI targetURI, HttpClient httpClient, ConnectorSocketListener listener,
-                      ProxyEventListener proxyEventListener, ScheduledExecutorService executor) {
+                      ProxyEventListener proxyEventListener, ScheduledExecutorService executor, String protocolVersion) {
         this.targetURI = targetURI;
         this.httpClient = httpClient;
         this.listener = listener;
         this.proxyEventListener = proxyEventListener;
         this.executor = executor;
+        this.protocolVersion = protocolVersion;
         this.unCompletedBuffers = new ArrayList<>();
         onSignOfLife();
     }
@@ -61,6 +97,13 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
     private void newRequestToTarget(RequestContext context, CrankerRequest protocolRequest, WebSocket webSocket, boolean isStreamEnd) {
 
         URI dest = targetURI.resolve(protocolRequest.dest);
+
+        boolean isWsUpgrade = checkIsWebSocketUpgrade(protocolRequest);
+
+        if (isWsUpgrade) {
+            handleWebSocketUpgrade(context, protocolRequest);
+            return;
+        }
 
         HttpRequest.BodyPublisher bodyPublisher;
         if (!isStreamEnd) {
@@ -88,6 +131,130 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
                 resetStream(context.requestId, 1011, "target request failed: " + throwable.getMessage());
             }
         });
+    }
+
+    private void handleWebSocketUpgrade(RequestContext context, CrankerRequest protocolRequest) {
+        URI targetWsUri = URI.create(targetURI.toString()
+            .replace("http://", "ws://")
+            .replace("https://", "wss://")
+        ).resolve(protocolRequest.dest);
+
+        WebSocket.Builder wsBuilder = httpClient.newWebSocketBuilder();
+        for (String h : protocolRequest.headers) {
+            int colon = h.indexOf(":");
+            if (colon > 0) {
+                String name = h.substring(0, colon).trim();
+                String value = h.substring(colon + 1).trim();
+                if (!RESTRICTED_WEBSOCKET_REQUEST_HEADERS.contains(name.toLowerCase())) {
+                    try {
+                        wsBuilder.header(name, value);
+                    } catch (IllegalArgumentException ignored) {
+                    }
+                }
+            }
+        }
+
+        var tgtWsListener = getTargetWebsocketListener(context);
+
+        wsBuilder.buildAsync(targetWsUri, tgtWsListener).whenComplete((targetWs, throwable) -> {
+            if (throwable != null) {
+                log.error("Failed to build target WS connection for request id: {}", context.requestId, throwable);
+                resetStream(context.requestId, 1011, "Failed to connect to target WS: " + throwable.getMessage());
+            }
+        });
+    }
+
+    private WebSocket.Listener getTargetWebsocketListener(RequestContext context) {
+        return new WebSocket.Listener() {
+            @Override
+            public void onOpen(WebSocket targetWs) {
+                context.targetWebSocket = targetWs;
+                CrankerResponseBuilder protocolResponse = CrankerResponseBuilder.newBuilder()
+                    .withResponseStatus(101)
+                    .withResponseReason("Switching Protocols")
+                    .withHeader("Upgrade", "websocket")
+                    .withHeader("Connection", "Upgrade");
+
+                if (targetWs.getSubprotocol() != null && !targetWs.getSubprotocol().isEmpty()) {
+                    protocolResponse.withHeader("Sec-WebSocket-Protocol", targetWs.getSubprotocol());
+                }
+
+                String headerText = protocolResponse.build();
+                final ByteBuffer[] headerMessages = headerMessages(context.requestId, true, false, headerText);
+                CompletableFuture<WebSocket> headerFuture = sendBinary(headerMessages[0], true);
+                for (int i = 1; i < headerMessages.length; i++) {
+                    final ByteBuffer headerMessage = headerMessages[i];
+                    headerFuture = headerFuture.thenCompose(ws -> sendBinary(headerMessage, true));
+                }
+                headerFuture.whenComplete((ws, err) -> {
+                    if (err != null) {
+                        resetStream(context.requestId, 1011, "failed to send WS handshake response headers: " + err.getMessage());
+                    }
+                });
+                targetWs.request(1);
+            }
+
+            @Override
+            public CompletionStage<?> onText(WebSocket targetWs, CharSequence data, boolean last) {
+                byte[] bytes = data.toString().getBytes(StandardCharsets.UTF_8);
+                ByteBuffer wrapped = wrapWsPayload(WS_OPCODE_TEXT, last, context.requestId, ByteBuffer.wrap(bytes));
+                sendBinary(wrapped, true);
+                targetWs.request(1);
+                return null;
+            }
+
+            @Override
+            public CompletionStage<?> onBinary(WebSocket targetWs, ByteBuffer data, boolean last) {
+                ByteBuffer wrapped = wrapWsPayload(WS_OPCODE_BINARY, last, context.requestId, data);
+                sendBinary(wrapped, true);
+                targetWs.request(1);
+                return null;
+            }
+
+            @Override
+            public CompletionStage<?> onPing(WebSocket targetWs, ByteBuffer message) {
+                ByteBuffer wrapped = wrapWsPayload(WS_OPCODE_PING, true, context.requestId, message);
+                sendBinary(wrapped, true);
+                targetWs.request(1);
+                return null;
+            }
+
+            @Override
+            public CompletionStage<?> onPong(WebSocket targetWs, ByteBuffer message) {
+                ByteBuffer wrapped = wrapWsPayload(WS_OPCODE_PONG, true, context.requestId, message);
+                sendBinary(wrapped, true);
+                targetWs.request(1);
+                return null;
+            }
+
+            @Override
+            public CompletionStage<?> onClose(WebSocket targetWs, int statusCode, String reason) {
+                ByteBuffer wrapped = wrapWsPayload(WS_OPCODE_CLOSE, true, context.requestId, closeMessagePayload(statusCode, reason));
+                sendBinary(wrapped, true);
+                contextMap.remove(context.requestId);
+                return null;
+            }
+
+            @Override
+            public void onError(WebSocket targetWs, Throwable error) {
+                log.info("Target connection error for request id: {}", context.requestId, error);
+                resetStream(context.requestId, 1011, "Target ws connection error: " + error.getMessage());
+            }
+        };
+    }
+
+    private static boolean checkIsWebSocketUpgrade(CrankerRequest protocolRequest) {
+        for (String h : protocolRequest.headers) {
+            int colon = h.indexOf(":");
+            if (colon > 0) {
+                String name = h.substring(0, colon).trim();
+                String value = h.substring(colon + 1).trim();
+                if (name.equalsIgnoreCase("upgrade") && value.equalsIgnoreCase("websocket")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -325,11 +492,13 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
                 final int errorCode = getErrorCode(completedData);
                 final String errorMessage = getErrorMessage(completedData);
                 final RequestContext context = contextMap.remove(requestId);
-                if (context != null && context.request != null) {
+                if (context != null) {
                     context.close();
-                    proxyEventListener.onProxyError(context.request, new IllegalStateException(
-                        String.format("Received rstMessage from cranker, client may closed request early." +
-                            "errorCode=%s, errorMessage=%s", errorCode, errorMessage)));
+                    if (context.requestId != null) {
+                        proxyEventListener.onProxyError(context.request, new IllegalStateException(
+                            String.format("Received rstMessage from cranker, client may closed request early." +
+                                "errorCode=%s, errorMessage=%s", errorCode, errorMessage)));
+                    }
                 }
                 releaseByteBuffer.complete(null);
                 webSocket.request(1);
@@ -343,6 +512,10 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
                 }
                 releaseByteBuffer.complete(null);
                 webSocket.request(1);
+                break;
+            }
+            case MESSAGE_TYPE_WEBSOCKET: {
+                handleWebSocketMessage(completedData, flags, requestId, releaseByteBuffer, webSocket);
                 break;
             }
             default: {
@@ -419,7 +592,7 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
 
     @Override
     public String version() {
-        return "cranker_3.0";
+        return protocolVersion;
     }
 
     void close() {
@@ -603,6 +776,103 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
             .rewind();
     }
 
+    static ByteBuffer wrapWsPayload(int opcode, boolean isLast, Integer requestId, ByteBuffer payload) {
+        int length = payload == null ? 0 : payload.remaining();
+        ByteBuffer out = ByteBuffer.allocate(10 + length);
+        out.put(MESSAGE_TYPE_WEBSOCKET);
+        int flags = (isLast ? WS_FIN_BIT : 0) | (opcode & WS_OPCODE_MASK);
+        out.put((byte) flags);
+        out.putInt(requestId);
+        out.putInt(length);
+        if (payload != null) {
+            out.put(payload);
+        }
+        out.rewind();
+        return out;
+    }
+
+    static ByteBuffer closeMessagePayload(int statusCode, String reason) {
+        byte[] reasonBytes = reason == null ? new byte[0] : reason.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer payload = ByteBuffer.allocate(2 + reasonBytes.length);
+        payload.putShort((short) statusCode);
+        payload.put(reasonBytes);
+        payload.flip();
+        return payload;
+    }
+
+    private void handleWebSocketMessage(ByteBuffer completedData, int flags, Integer requestId, CompletableFuture<?> releaseByteBuffer, WebSocket wSocket) {
+        try {
+            RequestContext context = contextMap.get(requestId);
+            if (context == null || context.targetWebSocket == null) {
+                releaseByteBuffer.complete(null);
+                wSocket.request(1);
+                return;
+            }
+
+            boolean isLast = (flags & WS_FIN_BIT) != 0;
+            int opcode = flags & WS_OPCODE_MASK;
+
+            int payloadLength = completedData.getInt();
+            int formerLimit = completedData.limit();
+            completedData.limit(completedData.position() + payloadLength);
+            ByteBuffer payload = completedData.slice();
+            completedData.position(completedData.limit());
+            completedData.limit(formerLimit);
+
+            switch (opcode) {
+                case WS_OPCODE_TEXT: { // Text
+                    String text = StandardCharsets.UTF_8.decode(payload).toString();
+                    context.targetWebSocket.sendText(text, isLast).whenComplete((ws, err) -> {
+                        releaseByteBuffer.complete(null);
+                        wSocket.request(1);
+                    });
+                    break;
+                }
+                case WS_OPCODE_BINARY: { // Binary
+                    context.targetWebSocket.sendBinary(payload, isLast).whenComplete((ws, err) -> {
+                        releaseByteBuffer.complete(null);
+                        wSocket.request(1);
+
+                    });
+                    break;
+                }
+                case WS_OPCODE_PING: { // Ping
+                    context.targetWebSocket.sendPing(payload).whenComplete((ws, err) -> {
+                        releaseByteBuffer.complete(null);
+                        wSocket.request(1);
+
+                    });
+                    break;
+                }
+                case WS_OPCODE_PONG: { // Ping
+                    context.targetWebSocket.sendPong(payload).whenComplete((ws, err) -> {
+                        releaseByteBuffer.complete(null);
+                        wSocket.request(1);
+
+                    });
+                    break;
+                }
+                case WS_OPCODE_CLOSE: {
+                    int statusCode = payload.remaining() >= 2 ? (payload.getShort() & 0xFFFF) : 1000;
+                    String reason = payload.remaining() > 0 ? StandardCharsets.UTF_8.decode(payload).toString() : "";
+                    context.targetWebSocket.sendClose(statusCode, reason).whenComplete((ws, err) -> {
+                        releaseByteBuffer.complete(null);
+                        wSocket.request(1);
+                    });
+                    contextMap.remove(requestId);
+                }
+                default: {
+                    releaseByteBuffer.complete(null);
+                    wSocket.request(1);
+                }
+            }
+        } catch (Throwable throwable) {
+            log.warn("Error handling wss payload", throwable);
+            releaseByteBuffer.complete(null);
+            wSocket.request(1);
+        }
+    }
+
     static ByteBuffer[] headerMessages(Integer requestId, boolean isHeaderEnd, boolean isStreamEnd, String fullHeaderLine) {
         final int chunkSize = 16000;
         if (fullHeaderLine.length() < chunkSize) {
@@ -729,6 +999,7 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
         Flow.Subscription responseBodySubscription;
         StringBuilder headerLineBuilder;
         Flow.Subscriber<? super ByteBuffer> requestBodySubscriber;
+        WebSocket targetWebSocket;
 
         ConcurrentLinkedQueue<Function<Flow.Subscriber<? super ByteBuffer>, CompletableFuture<Void>>> pendingRequestBodyTasks;
 
@@ -837,6 +1108,12 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
             }
             if (responseBodySubscription != null) {
                 responseBodySubscription.cancel();
+            }
+            if (targetWebSocket != null) {
+                try {
+                    targetWebSocket.sendClose(1001, "Cranker tunnel reset");
+                } catch (Exception ignored) {
+                }
             }
         }
 

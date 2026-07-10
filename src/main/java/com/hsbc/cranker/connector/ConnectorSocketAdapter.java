@@ -10,6 +10,7 @@ import java.util.concurrent.ScheduledExecutorService;
 
 import static com.hsbc.cranker.connector.CrankerConnectorBuilder.CRANKER_PROTOCOL_1;
 import static com.hsbc.cranker.connector.CrankerConnectorBuilder.CRANKER_PROTOCOL_3;
+import static com.hsbc.cranker.connector.CrankerConnectorBuilder.CRANKER_PROTOCOL_3_1;
 
 
 /**
@@ -51,6 +52,10 @@ public class ConnectorSocketAdapter implements WebSocket.Listener, ConnectorSock
         };
     }
 
+    private static boolean isV3(String proto) {
+        return CRANKER_PROTOCOL_3_1.equals(proto) || CRANKER_PROTOCOL_3.equals(proto);
+    }
+
     @Override
     public State state() {
         return underlying2 != null ? underlying2.state() : State.NOT_STARTED;
@@ -62,7 +67,7 @@ public class ConnectorSocketAdapter implements WebSocket.Listener, ConnectorSock
     }
 
     void close() {
-        if (CRANKER_PROTOCOL_3.equals(protocol) && underlying2 != null) {
+        if (isV3(protocol) && underlying2 != null) {
             ((ConnectorSocketV3) underlying2).close();
         } else if (CRANKER_PROTOCOL_1.equals(protocol) && underlying2 != null) {
             ((ConnectorSocketImpl) underlying2).close();
@@ -70,7 +75,7 @@ public class ConnectorSocketAdapter implements WebSocket.Listener, ConnectorSock
     }
 
     void updateState(State state) {
-        if (CRANKER_PROTOCOL_3.equals(protocol) && underlying2 != null) {
+        if (isV3(protocol) && underlying2 != null) {
             ((ConnectorSocketV3) underlying2).updateState(state);
         } else if (CRANKER_PROTOCOL_1.equals(protocol) && underlying2 != null) {
             ((ConnectorSocketImpl) underlying2).updateState(state);
@@ -80,9 +85,9 @@ public class ConnectorSocketAdapter implements WebSocket.Listener, ConnectorSock
     @Override
     public void onOpen(WebSocket webSocket) {
         final String subProtocol = webSocket.getSubprotocol();
-        if (CRANKER_PROTOCOL_3.equals(subProtocol)) {
-            final ConnectorSocketV3 connectorSocketV3 = new ConnectorSocketV3(targetURI, httpClient, listener, proxyEventListener, executor);
-            protocol = CRANKER_PROTOCOL_3;
+        if (isV3(subProtocol)) {
+            final ConnectorSocketV3 connectorSocketV3 = new ConnectorSocketV3(targetURI, httpClient, listener, proxyEventListener, executor, subProtocol);
+            protocol = subProtocol;
             underlying = connectorSocketV3;
             underlying2 = connectorSocketV3;
         } else {
@@ -129,7 +134,7 @@ public class ConnectorSocketAdapter implements WebSocket.Listener, ConnectorSock
      * @return CompletableFuture which resolved when the complete action done
      */
     public CompletableFuture<Void> complete() {
-        if (CRANKER_PROTOCOL_3.equals(protocol) && underlying != null) {
+        if (isV3(protocol) && underlying != null) {
             return ((ConnectorSocketV3) underlying).complete();
         } else if (CRANKER_PROTOCOL_1.equals(protocol) && underlying != null) {
             return ((ConnectorSocketImpl) underlying).complete();

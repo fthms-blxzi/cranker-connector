@@ -30,7 +30,12 @@ public class CrankerConnectorBuilder {
      */
     public final static String CRANKER_PROTOCOL_3 = "cranker_3.0";
 
-    private final static List<String> SUPPORTED_CRANKER_PROTOCOLS = List.of(CRANKER_PROTOCOL_3, CRANKER_PROTOCOL_1);
+    /**
+     * cranker protocol 3.1
+     */
+    public final static String CRANKER_PROTOCOL_3_1 = "cranker_3.1";
+
+    private final static List<String> SUPPORTED_CRANKER_PROTOCOLS = List.of(CRANKER_PROTOCOL_3, CRANKER_PROTOCOL_1, CRANKER_PROTOCOL_3_1);
 
     private Supplier<Collection<URI>> crankerUris;
     private String domain = "*";
@@ -47,7 +52,7 @@ public class CrankerConnectorBuilder {
     private TimeUnit routerUpdateTimeUnit = TimeUnit.MINUTES;
     private int routerDeregisterTimeout = 1;
     private TimeUnit routerDeregisterTimeUnit = TimeUnit.MINUTES;
-    private List<String> preferredProtocols = List.of(CRANKER_PROTOCOL_3, CRANKER_PROTOCOL_1);
+    private List<String> preferredProtocols = List.of(CRANKER_PROTOCOL_3_1, CRANKER_PROTOCOL_3, CRANKER_PROTOCOL_1);
 
     /**
      * <p>Specifies the source of the router URIs to register with, for example: <code>builder.withRouterUris(RegistrationUriSuppliers.dnsLookup(URI.create("wss://router.example.org")))</code></p>
