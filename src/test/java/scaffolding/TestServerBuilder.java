@@ -16,21 +16,31 @@ import java.util.concurrent.TimeUnit;
 public class TestServerBuilder {
 
     private final MuServerBuilder builder;
+    private final boolean isHttps;
     private RustCrankerRouter rustRouterForReg = null;
     private RustCrankerRouter rustRouterForVisit = null;
 
     private int requestedPort = 0;
 
-    private TestServerBuilder(MuServerBuilder builder) {
+    private TestServerBuilder(MuServerBuilder builder, boolean isHttps) {
         this.builder = builder;
+        this.isHttps = isHttps && RustTestHelper.isTlsMode();
     }
 
     public static TestServerBuilder httpServer() {
-        return new TestServerBuilder(MuServerBuilder.httpServer());
+        return new TestServerBuilder(MuServerBuilder.httpServer(), false);
     }
 
     public static TestServerBuilder httpsServer() {
-        return new TestServerBuilder(MuServerBuilder.httpsServer());
+        if (RustTestHelper.isTlsMode()) {
+            return new TestServerBuilder(MuServerBuilder.httpsServer(), true);
+        } else {
+            return new TestServerBuilder(MuServerBuilder.httpServer(), false);
+        }
+    }
+
+    public static com.hsbc.cranker.mucranker.CrankerRouterBuilder crankerRouter() {
+        return com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter();
     }
 
     public TestServerBuilder addHandler(MuHandler handler) {
@@ -61,7 +71,15 @@ public class TestServerBuilder {
 
     public TestServerBuilder withHttpsPort(int port) {
         this.requestedPort = port;
-        builder.withHttpPort(port);
+        if (RustTestHelper.isTlsMode()) {
+            if (RustTestHelper.isRustMode()) {
+                builder.withHttpPort(port);
+            } else {
+                builder.withHttpsPort(port);
+            }
+        } else {
+            builder.withHttpPort(port);
+        }
         return this;
     }
 
@@ -86,7 +104,7 @@ public class TestServerBuilder {
     }
 
     public MuServer start() {
-        boolean isRustMode = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+        boolean isRustMode = RustTestHelper.isRustMode();
         if (isRustMode && (rustRouterForReg != null || rustRouterForVisit != null)) {
             // In Rust mode we direct traffic directly to the Rust ports
             // without starting any JVM-side TCP proxy
@@ -113,7 +131,16 @@ public class TestServerBuilder {
                             public Object invoke(Object proxyInstance, Method method, Object[] args) throws Throwable {
                                 String methodName = method.getName();
                                 if (methodName.equals("uri") || methodName.equals("httpUri") || methodName.equals("httpsUri")) {
-                                    return URI.create("http://127.0.0.1:" + targetRustPort);
+                                    if (isHttps) {
+                                        if (methodName.equals("httpsUri")) {
+                                            int tlsPort = targetRustPort > 50000 ? targetRustPort - 10000 : targetRustPort + 10000;
+                                            return URI.create("https://127.0.0.1:" + tlsPort);
+                                        } else {
+                                            return URI.create("http://127.0.0.1:" + targetRustPort);
+                                        }
+                                    } else {
+                                        return URI.create("http://127.0.0.1:" + targetRustPort);
+                                    }
                                 } else if (methodName.equals("stop")) {
                                     return method.invoke(realServer, args);
                                 }

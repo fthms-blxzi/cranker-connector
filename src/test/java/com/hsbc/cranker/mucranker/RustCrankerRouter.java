@@ -1,6 +1,7 @@
 package com.hsbc.cranker.mucranker;
 
 import io.muserver.MuHandler;
+import scaffolding.RustTestHelper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -52,15 +53,46 @@ public class RustCrankerRouter implements CrankerRouter {
         lastAssignedPort = portToUse;
         this.regPort = portToUse;
         this.visitPort = this.regPort;
-        this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(java.time.Duration.ofMillis(2000))
-            .build();
+
+        HttpClient client = null;
+        try {
+            javax.net.ssl.TrustManager[] trustAllCerts = new javax.net.ssl.TrustManager[]{
+                new javax.net.ssl.X509TrustManager() {
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() { return null; }
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                }
+            };
+            javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance("SSL");
+            sc.init(null, trustAllCerts, new java.security.SecureRandom());
+            client = HttpClient.newBuilder()
+                    .sslContext(sc)
+                    .connectTimeout(java.time.Duration.ofMillis(2000))
+                    .build();
+        } catch (Exception e) {
+            client = HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofMillis(2000))
+                    .build();
+        }
+        this.httpClient = client;
 
         Process proc = null;
         try {
             String envExe = System.getenv("RUST_ROUTER_SERVER_EXE");
             File exe = envExe != null ? new File(envExe) : null;
             if (exe == null || !exe.exists()) {
+                exe = new File("../scr-axum-cranker-router/target/debug/examples/unified_router_server.exe");
+            }
+            if (!exe.exists()) {
+                exe = new File("../scr-axum-cranker-router/target/debug/examples/unified_router_server");
+            }
+            if (!exe.exists()) {
+                exe = new File("../scr-axum-cranker-router/target/release/examples/unified_router_server.exe");
+            }
+            if (!exe.exists()) {
+                exe = new File("../scr-axum-cranker-router/target/release/examples/unified_router_server");
+            }
+            if (!exe.exists()) {
                 exe = new File("../scr-axum-cranker-router/target/debug/unified_router_server.exe");
             }
             if (!exe.exists()) {
@@ -91,7 +123,7 @@ public class RustCrankerRouter implements CrankerRouter {
                 exe = new File("../scr-axum-cranker-router/target/release/examples/router_server.exe");
             }
             if (!exe.exists()) {
-                throw new IllegalStateException("Rust router_server/unified_router_server binary not found. Please specify RUST_ROUTER_SERVER_EXE or run 'cargo build --bin unified_router_server'");
+                throw new IllegalStateException("Rust router_server/unified_router_server binary not found. Please specify RUST_ROUTER_SERVER_EXE or run 'cargo build --example unified_router_server'");
             }
 
             List<String> cmd = new ArrayList<>();
@@ -116,6 +148,8 @@ public class RustCrankerRouter implements CrankerRouter {
             cmd.add("true");
             cmd.add("--idle-read-timeout-ms");
             cmd.add(String.valueOf(idleReadTimeoutMills));
+            cmd.add("--tls");
+            cmd.add(String.valueOf(RustTestHelper.isTlsMode()));
 
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectOutput(ProcessBuilder.Redirect.to(new File("target/rust-router-" + regPort + ".log")));

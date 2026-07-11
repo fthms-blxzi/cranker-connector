@@ -33,7 +33,7 @@ public class BaseEndToEndTest {
     protected CrankerRouter crankerRouter = buildRouter();
 
     private static CrankerRouter buildRouter() {
-        boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+        boolean isRust = scaffolding.RustTestHelper.isRustMode();
         if (isRust) {
             return new RustCrankerRouter(
                     null, false, false, "cranker-connector-test", java.util.Collections.emptySet(),
@@ -52,7 +52,7 @@ public class BaseEndToEndTest {
     protected MuServer crankerServer = startCrankerServer(0);
 
     protected MuServer startCrankerServer(int port) {
-        boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+        boolean isRust = scaffolding.RustTestHelper.isRustMode();
         if (isRust) {
             return scaffolding.TestServerBuilder.httpServer().withHttpPort(port).addHandler(crankerRouter.createHttpHandler()).start();
         } else {
@@ -61,7 +61,7 @@ public class BaseEndToEndTest {
     }
 
     protected MuServer startRegistrationServer(int port) {
-        boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+        boolean isRust = scaffolding.RustTestHelper.isRustMode();
         if (isRust) {
             return scaffolding.TestServerBuilder.httpServer().withHttpPort(port).addHandler(crankerRouter.createRegistrationHandler()).start();
         } else {
@@ -145,10 +145,11 @@ public class BaseEndToEndTest {
         if (crankerRouter != null) {
             swallowException(crankerRouter::stop);
         }
-        boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+        boolean isRust = scaffolding.RustTestHelper.isRustMode();
         if(isRust){
             try { Thread.sleep(300); } catch (Exception ignored) {}
         }
     }
 
 }
+

@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 import static com.hsbc.cranker.connector.BaseEndToEndTest.preferredProtocols;
 import static com.hsbc.cranker.connector.BaseEndToEndTest.startConnectorAndWaitForRegistration;
-import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
+import static scaffolding.TestServerBuilder.crankerRouter;
 import static scaffolding.TestServerBuilder.httpsServer;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static scaffolding.Action.swallowException;
@@ -56,6 +56,7 @@ class CrankerConnectorBuilderTest {
     }
 
     @RepeatedTest(3)
+    @org.junit.jupiter.api.condition.DisabledIf("isRustAndTlsOff")
     void testMaxHeadersSize_normal(RepetitionInfo repetitionInfo) throws IOException, InterruptedException {
 
         setupServerForMaxHeaders(40000, preferredProtocols(repetitionInfo));
@@ -78,6 +79,7 @@ class CrankerConnectorBuilderTest {
     }
 
     @RepeatedTest(3)
+    @org.junit.jupiter.api.condition.DisabledIf("isRustAndTlsOff")
     void testMaxHeadersSize_exception(RepetitionInfo repetitionInfo) throws IOException, InterruptedException {
 
         setupServerForMaxHeaders(40000,  preferredProtocols(repetitionInfo));
@@ -120,4 +122,9 @@ class CrankerConnectorBuilderTest {
 
         this.connector = startConnectorAndWaitForRegistration(crankerRouter, "*", targetServer, preferredProtocols, 2, this.crankerServer);
     }
+
+    static boolean isRustAndTlsOff() {
+        return scaffolding.RustTestHelper.isRustMode() && !scaffolding.RustTestHelper.isTlsMode();
+    }
 }
+

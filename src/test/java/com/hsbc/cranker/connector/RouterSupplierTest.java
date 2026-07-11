@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
+import static scaffolding.TestServerBuilder.crankerRouter;
 import static io.muserver.ContextHandlerBuilder.context;
 import static scaffolding.TestServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -274,3 +274,4 @@ public class RouterSupplierTest extends BaseEndToEndTest {
         return URI.create(scheme + "://" + routerServer.uri().getAuthority());
     }
 }
+

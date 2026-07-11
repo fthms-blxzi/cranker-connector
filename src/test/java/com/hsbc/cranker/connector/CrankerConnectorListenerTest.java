@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.hsbc.cranker.connector.BaseEndToEndTest.preferredProtocols;
-import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
+import static scaffolding.TestServerBuilder.crankerRouter;
 import static scaffolding.TestServerBuilder.httpsServer;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -212,3 +212,4 @@ public class CrankerConnectorListenerTest {
     }
 
 }
+

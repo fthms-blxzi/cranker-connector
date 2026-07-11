@@ -14,7 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
+import static scaffolding.TestServerBuilder.crankerRouter;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
@@ -76,7 +76,7 @@ public class ServerSentEventTest extends BaseEndToEndTest {
                "onClosed:"
            )));
        } finally {
-           boolean isRustMode = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+           boolean isRustMode = scaffolding.RustTestHelper.isRustMode();
            if (isRustMode && crankerRouter != null) {
                swallowException(crankerRouter::stop);
                this.crankerRouter = null;
@@ -146,7 +146,7 @@ public class ServerSentEventTest extends BaseEndToEndTest {
                startsWith("onFailure: message=")
            ));
        } finally {
-           boolean isRustMode = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+           boolean isRustMode = scaffolding.RustTestHelper.isRustMode();
            if (isRustMode && crankerRouter != null) {
                swallowException(crankerRouter::stop);
                this.crankerRouter = null;
@@ -155,3 +155,4 @@ public class ServerSentEventTest extends BaseEndToEndTest {
     }
 
 }
+

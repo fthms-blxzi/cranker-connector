@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static com.hsbc.cranker.connector.BaseEndToEndTest.preferredProtocols;
 import static com.hsbc.cranker.connector.BaseEndToEndTest.startConnectorAndWaitForRegistration;
 import static com.hsbc.cranker.connector.BaseEndToEndTest.waitForRegistration;
-import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
+import static scaffolding.TestServerBuilder.crankerRouter;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -79,7 +79,7 @@ public class ConnectRetryTest {
         assertEquals(body, resp.body());
 
         int originalPort = router.uri().getPort();
-            boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+            boolean isRust = scaffolding.RustTestHelper.isRustMode();
             if (isRust) {
                 crankerRouter.stop();
             }
@@ -121,14 +121,14 @@ public class ConnectRetryTest {
 
                 assertThat(connector.routers().get(0).currentUnsuccessfulConnectionAttempts(), is(0));
             } finally {
-                boolean isRustMode = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+                boolean isRustMode = scaffolding.RustTestHelper.isRustMode();
                 if (isRustMode && crankerRouter != null) {
                     swallowException(crankerRouter::stop);
                     this.crankerRouter = null;
                 }
             }
         } finally {
-            boolean isRustMode = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+            boolean isRustMode = scaffolding.RustTestHelper.isRustMode();
             if (isRustMode && crankerRouter != null) {
                 swallowException(crankerRouter::stop);
                 this.crankerRouter = null;
@@ -182,7 +182,7 @@ public class ConnectRetryTest {
         verifyHttpRequestWorking();
 
         int originalPort = router.uri().getPort();
-            boolean isRust = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+            boolean isRust = scaffolding.RustTestHelper.isRustMode();
             if (isRust) {
         crankerRouter.stop();
             }
@@ -207,14 +207,14 @@ public class ConnectRetryTest {
 
                 verifyHttpRequestWorking();
             } finally {
-                boolean isRustMode = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+                boolean isRustMode = scaffolding.RustTestHelper.isRustMode();
                 if (isRustMode && crankerRouter != null) {
                     swallowException(crankerRouter::stop);
                     this.crankerRouter = null;
                 }
             }
         } finally {
-            boolean isRustMode = Boolean.getBoolean("cranker.router.rust") || "true".equalsIgnoreCase(System.getenv("CRANKER_ROUTER_RUST"));
+            boolean isRustMode = scaffolding.RustTestHelper.isRustMode();
             if (isRustMode && crankerRouter != null) {
                 swallowException(crankerRouter::stop);
                 this.crankerRouter = null;
@@ -232,3 +232,4 @@ public class ConnectRetryTest {
         assertEquals(body, resp.body());
     }
 }
+

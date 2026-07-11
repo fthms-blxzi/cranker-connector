@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.hsbc.cranker.connector.BaseEndToEndTest.*;
-import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
+import static scaffolding.TestServerBuilder.crankerRouter;
 import static scaffolding.TestServerBuilder.httpServer;
 import static scaffolding.TestServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -474,3 +474,4 @@ public class CrankerConnectorStopTest {
     }
 
 }
+

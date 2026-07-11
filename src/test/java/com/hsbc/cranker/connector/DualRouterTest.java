@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
-import static com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter;
+import static scaffolding.TestServerBuilder.crankerRouter;
 import static io.muserver.ContextHandlerBuilder.context;
 import static scaffolding.TestServerBuilder.httpServer;
 import static java.util.stream.Collectors.toList;
@@ -167,3 +167,4 @@ public class DualRouterTest extends BaseEndToEndTest {
     }
 
 }
+
