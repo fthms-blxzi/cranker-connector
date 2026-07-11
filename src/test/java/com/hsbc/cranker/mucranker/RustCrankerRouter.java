@@ -126,6 +126,8 @@ public class RustCrankerRouter implements CrankerRouter {
             cmd.add(String.valueOf(idleReadTimeoutMills));
             cmd.add("--tls");
             cmd.add(String.valueOf(RustTestHelper.isTlsMode()));
+            cmd.add("--proxy-host-header");
+            cmd.add(String.valueOf(!doNotProxyHeaders.contains("host")));
 
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectOutput(ProcessBuilder.Redirect.to(new File("target/rust-router-" + regPort + ".log")));
