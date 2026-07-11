@@ -8,6 +8,7 @@ import io.muserver.MuServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.RepetitionInfo;
+import org.junit.jupiter.api.condition.DisabledIf;
 
 import java.io.IOException;
 import java.net.URI;
@@ -78,7 +79,13 @@ class CrankerConnectorBuilderTest {
     }
 
     @RepeatedTest(3)
-    @org.junit.jupiter.api.condition.DisabledIf("isRustAndTlsOff")
+    @DisabledIf(
+        value = "isRustAndTlsOff",
+        disabledReason =
+            "axum/tower::http cannot limit the header size so it will not return 431 in non-tls mode. " +
+                "But why in tls mode it works?" +
+                "Actually if comment each of the test they will pass, but put together they will get stuck."
+    )
     void testMaxHeadersSize_exception(RepetitionInfo repetitionInfo) throws IOException, InterruptedException {
 
         setupServerForMaxHeaders(40000,  preferredProtocols(repetitionInfo));
