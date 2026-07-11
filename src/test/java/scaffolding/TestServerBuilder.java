@@ -43,8 +43,8 @@ public class TestServerBuilder {
         }
     }
 
-    public static com.hsbc.cranker.mucranker.CrankerRouterBuilder crankerRouter() {
-        return com.hsbc.cranker.mucranker.CrankerRouterBuilder.crankerRouter();
+    public static TestCrankerRouterBuilder crankerRouter() {
+        return TestCrankerRouterBuilder.crankerRouter();
     }
 
     public TestServerBuilder addHandler(MuHandler handler) {
@@ -75,14 +75,10 @@ public class TestServerBuilder {
 
     public TestServerBuilder withHttpsPort(int port) {
         this.requestedPort = port;
-        if (RustTestHelper.isTlsMode()) {
-            if (RustTestHelper.isRustMode()) {
-                builder.withHttpPort(port);
-            } else {
-                builder.withHttpsPort(port);
-            }
-        } else {
+        if (RustTestHelper.isRustMode()) {
             builder.withHttpPort(port);
+        } else {
+            builder.withHttpsPort(port);
         }
         return this;
     }
