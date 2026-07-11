@@ -384,7 +384,7 @@ public class ConnectorSocketV3 implements WebSocket.Listener, ConnectorSocket {
 
     private void putHeadersTo(HttpRequest.Builder requestToTarget, CrankerRequest crankerRequest) {
         crankerRequest.headerEntryList().stream()
-            .filter(h -> !HttpUtils.DISALLOWED_REQUEST_HEADERS.contains(h.getKey()))
+            .filter(h -> !HttpUtils.DISALLOWED_REQUEST_HEADERS.contains(h.getKey().toLowerCase()))
             .forEach(h -> requestToTarget.header(h.getKey(), h.getValue()));
     }
 
