@@ -81,49 +81,25 @@ public class RustCrankerRouter implements CrankerRouter {
             String envExe = System.getenv("RUST_ROUTER_SERVER_EXE");
             File exe = envExe != null ? new File(envExe) : null;
             if (exe == null || !exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/debug/examples/unified_router_server.exe");
+                String[] candidatePaths = {
+                    "../scr-axum-cranker-router/target/release/examples/unified_router_server",
+                    "../scr-axum-cranker-router/target/debug/examples/unified_router_server"
+                };
+                for (String path : candidatePaths) {
+                    File f = new File(path + ".exe");
+                    if (f.exists()) {
+                        exe = f;
+                        break;
+                    }
+                    f = new File(path);
+                    if (f.exists()) {
+                        exe = f;
+                        break;
+                    }
+                }
             }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/debug/examples/unified_router_server");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/release/examples/unified_router_server.exe");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/release/examples/unified_router_server");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/debug/unified_router_server.exe");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/debug/unified_router_server");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/release/unified_router_server.exe");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/release/unified_router_server");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/debug/router_server.exe");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/debug/router_server");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/release/router_server.exe");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/release/router_server");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/debug/examples/router_server.exe");
-            }
-            if (!exe.exists()) {
-                exe = new File("../scr-axum-cranker-router/target/release/examples/router_server.exe");
-            }
-            if (!exe.exists()) {
-                throw new IllegalStateException("Rust router_server/unified_router_server binary not found. Please specify RUST_ROUTER_SERVER_EXE or run 'cargo build --example unified_router_server'");
+            if (exe == null || !exe.exists()) {
+                throw new IllegalStateException("Rust unified_router_server binary not found. Please specify RUST_ROUTER_SERVER_EXE or run 'cargo build --example unified_router_server'");
             }
 
             List<String> cmd = new ArrayList<>();
@@ -174,7 +150,7 @@ public class RustCrankerRouter implements CrankerRouter {
                 Thread.sleep(100);
             }
             if (!started) {
-                throw new IllegalStateException("Rust router_server failed to start on ports " + regPort + " and " + visitPort);
+                throw new IllegalStateException("Rust unified_router_server failed to start on ports " + regPort + " and " + visitPort);
             }
 
         } catch (Exception e) {
