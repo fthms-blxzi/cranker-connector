@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static scaffolding.Action.swallowException;
 import static scaffolding.AssertUtils.assertEventually;
 
-@org.junit.jupiter.api.condition.DisabledIf("isRustAndTlsOff")
 public class RouterSupplierTest extends BaseEndToEndTest {
 
     private static final String route = "my-service";
@@ -272,10 +271,6 @@ public class RouterSupplierTest extends BaseEndToEndTest {
     private static URI registrationUri(MuServer routerServer) {
         String scheme = routerServer.uri().getScheme().equals("http") ? "ws" : "wss";
         return URI.create(scheme + "://" + routerServer.uri().getAuthority());
-    }
-
-    static boolean isRustAndTlsOff() {
-        return scaffolding.RustTestHelper.isRustMode() && !scaffolding.RustTestHelper.isTlsMode();
     }
 }
 

@@ -56,7 +56,6 @@ class CrankerConnectorBuilderTest {
     }
 
     @RepeatedTest(3)
-    @org.junit.jupiter.api.condition.DisabledIf("isRustAndTlsOff")
     void testMaxHeadersSize_normal(RepetitionInfo repetitionInfo) throws IOException, InterruptedException {
 
         setupServerForMaxHeaders(40000, preferredProtocols(repetitionInfo));
