@@ -5,6 +5,7 @@ import io.muserver.Method;
 import io.muserver.MuServer;
 import io.muserver.SsePublisher;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.condition.DisabledIf;
 import scaffolding.SseTestClient;
 
 import java.net.URI;
@@ -24,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static scaffolding.Action.swallowException;
 import static scaffolding.AssertUtils.assertEventually;
 
+@DisabledIf("scaffolding.RustTestHelper#isRustMode")
 public class RouterSupplierTest extends BaseEndToEndTest {
 
     private static final String route = "my-service";
