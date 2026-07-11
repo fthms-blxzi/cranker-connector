@@ -24,7 +24,7 @@ public class TestServerBuilder {
 
     private TestServerBuilder(MuServerBuilder builder, boolean isHttps) {
         this.builder = builder;
-        this.isHttps = isHttps && RustTestHelper.isTlsMode();
+        this.isHttps = isHttps;
     }
 
     public static TestServerBuilder httpServer() {
@@ -32,10 +32,14 @@ public class TestServerBuilder {
     }
 
     public static TestServerBuilder httpsServer() {
-        if (RustTestHelper.isTlsMode()) {
-            return new TestServerBuilder(MuServerBuilder.httpsServer(), true);
+        if (RustTestHelper.isRustMode()) {
+            if (RustTestHelper.isTlsMode()) {
+                return new TestServerBuilder(MuServerBuilder.httpsServer(), true);
+            } else {
+                return new TestServerBuilder(MuServerBuilder.httpServer(), false);
+            }
         } else {
-            return new TestServerBuilder(MuServerBuilder.httpServer(), false);
+            return new TestServerBuilder(MuServerBuilder.httpsServer(), true);
         }
     }
 
