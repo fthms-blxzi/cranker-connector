@@ -82,8 +82,8 @@ public class RustCrankerRouter implements CrankerRouter {
             File exe = envExe != null ? new File(envExe) : null;
             if (exe == null || !exe.exists()) {
                 String[] candidatePaths = {
-                    "../scr-axum-cranker-router/target/release/examples/unified_router_server",
-                    "../scr-axum-cranker-router/target/debug/examples/unified_router_server"
+                    "../scr-axum-cranker-router/target/debug/examples/unified_router_server",
+                    "../scr-axum-cranker-router/target/release/examples/unified_router_server"
                 };
                 for (String path : candidatePaths) {
                     File f = new File(path + ".exe");
