@@ -55,7 +55,6 @@ public class CrankerConnectorListenerTest {
 
         this.crankerRouter = crankerRouter()
             .withSupportedCrankerProtocols(List.of("cranker_3.0", "cranker_1.0"))
-            .withHttp2(false)
             .start();
 
         this.routerServer = httpsServer()
@@ -135,7 +134,6 @@ public class CrankerConnectorListenerTest {
 
         this.crankerRouter = crankerRouter()
             .withSupportedCrankerProtocols(List.of("cranker_3.0", "cranker_1.0"))
-            .withHttp2(false)
             .start();
 
         // router server with auth header checking

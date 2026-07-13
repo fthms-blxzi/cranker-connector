@@ -129,7 +129,6 @@ class CrankerConnectorBuilderTest {
 
         this.crankerRouter = crankerRouter()
             .withSupportedCrankerProtocols(List.of("cranker_3.0", "cranker_1.0"))
-            .withHttp2(false)
             .start();
 
         this.crankerServer = httpsServer()
