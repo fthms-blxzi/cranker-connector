@@ -132,7 +132,7 @@ public class TestServerBuilder {
                                 String methodName = method.getName();
                                 if (methodName.equals("uri") || methodName.equals("httpUri") || methodName.equals("httpsUri")) {
                                     if (isHttps) {
-                                        if (methodName.equals("httpsUri")) {
+                                        if (methodName.equals("httpsUri") || methodName.equals("uri")) {
                                             int tlsPort = targetRustPort > 50000 ? targetRustPort - 10000 : targetRustPort + 10000;
                                             return URI.create("https://127.0.0.1:" + tlsPort);
                                         } else {

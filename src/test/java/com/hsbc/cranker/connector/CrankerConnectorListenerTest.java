@@ -9,6 +9,8 @@ import io.muserver.RouteHandler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.RepetitionInfo;
+import org.junit.jupiter.api.condition.DisabledIf;
+import scaffolding.RustTestHelper;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -125,9 +127,8 @@ public class CrankerConnectorListenerTest {
     }
 
     @RepeatedTest(3)
-    @org.junit.jupiter.api.condition.DisabledIfSystemProperty(named = "cranker.router.rust", matches = "true")
+    @DisabledIf("scaffolding.RustTestHelper#isRustMode")
     void testRegistrationEventListener_supplyingAuthHeader(RepetitionInfo repetitionInfo) throws Exception {
-
         final String authHeader = "authHeader";
         final String authToken = "authToken";
 

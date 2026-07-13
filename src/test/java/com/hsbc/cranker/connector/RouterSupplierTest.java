@@ -4,28 +4,39 @@ import com.hsbc.cranker.mucranker.CrankerRouter;
 import io.muserver.Method;
 import io.muserver.MuServer;
 import io.muserver.SsePublisher;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.RepetitionInfo;
 import org.junit.jupiter.api.condition.DisabledIf;
 import scaffolding.SseTestClient;
 
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static scaffolding.TestServerBuilder.crankerRouter;
 import static io.muserver.ContextHandlerBuilder.context;
-import static scaffolding.TestServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static scaffolding.Action.swallowException;
 import static scaffolding.AssertUtils.assertEventually;
+import static scaffolding.TestServerBuilder.crankerRouter;
+import static scaffolding.TestServerBuilder.httpServer;
 
-@DisabledIf("scaffolding.RustTestHelper#isRustMode")
 public class RouterSupplierTest extends BaseEndToEndTest {
 
     private static final String route = "my-service";
@@ -55,6 +66,7 @@ public class RouterSupplierTest extends BaseEndToEndTest {
     }
 
     @RepeatedTest(3)
+    @DisabledIf("scaffolding.RustTestHelper#isRustMode") // FIXME: Stuck in rust mode
     public void routersCanBeDynamicallyAddedAndRemoved(RepetitionInfo repetitionInfo) throws Exception {
 
         final AtomicReference<RouterEventListener.ChangeData> changeData = new AtomicReference<>();

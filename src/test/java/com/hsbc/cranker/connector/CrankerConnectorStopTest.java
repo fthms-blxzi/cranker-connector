@@ -30,7 +30,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.Action.swallowException;
 import static scaffolding.AssertUtils.assertEventually;
 
-// @org.junit.jupiter.api.condition.DisabledIfSystemProperty(named = "cranker.router.rust", matches = "true")
 public class CrankerConnectorStopTest {
 
     private static final Logger log = LoggerFactory.getLogger(CrankerConnectorStopTest.class);
