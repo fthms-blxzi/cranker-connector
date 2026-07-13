@@ -38,7 +38,7 @@ public class BaseEndToEndTest {
             return new RustCrankerRouter(
                     null, false, false, "cranker-connector-test", java.util.Collections.emptySet(),
                     10000, 2000, 30000, 60000, java.util.Collections.emptyList(), null,
-                    List.of("cranker_3.0", "cranker_1.0"), null
+                    List.of("cranker_3.0", "cranker_1.0"), null, true
             );
         } else {
             return CrankerRouterBuilder

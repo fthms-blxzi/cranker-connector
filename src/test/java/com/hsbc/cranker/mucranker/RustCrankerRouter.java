@@ -30,6 +30,7 @@ public class RustCrankerRouter implements CrankerRouter {
     private final int regPort;
     private final int visitPort;
     private final HttpClient httpClient;
+    private final boolean http2;
 
     public RustCrankerRouter(
             IPValidator ipValidator,
@@ -44,7 +45,8 @@ public class RustCrankerRouter implements CrankerRouter {
             List<ProxyListener> completionListeners,
             RouteResolver routeResolver,
             List<String> supportedCrankerProtocol,
-            java.util.function.Function<io.muserver.MuRequest, String> clientIpProvider
+            java.util.function.Function<io.muserver.MuRequest, String> clientIpProvider,
+            boolean http2
     ) {
         int portToUse = lastAssignedPort;
         if (portToUse == 0 || !isPortFree(portToUse)) {
@@ -53,6 +55,7 @@ public class RustCrankerRouter implements CrankerRouter {
         lastAssignedPort = portToUse;
         this.regPort = portToUse;
         this.visitPort = this.regPort;
+        this.http2 = http2;
 
         HttpClient client = null;
         try {
@@ -126,6 +129,8 @@ public class RustCrankerRouter implements CrankerRouter {
             cmd.add(String.valueOf(idleReadTimeoutMills));
             cmd.add("--tls");
             cmd.add(String.valueOf(RustTestHelper.isTlsMode()));
+            cmd.add("--http2");
+            cmd.add(String.valueOf(this.http2));
             cmd.add("--proxy-host-header");
             cmd.add(String.valueOf(!doNotProxyHeaders.contains("host")));
 
@@ -133,7 +138,6 @@ public class RustCrankerRouter implements CrankerRouter {
             pb.redirectOutput(ProcessBuilder.Redirect.to(new File("target/rust-router-" + regPort + ".log")));
             pb.redirectError(ProcessBuilder.Redirect.to(new File("target/rust-router-err-" + regPort + ".log")));
             proc = pb.start();
-
             // Wait for it to start up
             long start = System.currentTimeMillis();
             boolean started = false;

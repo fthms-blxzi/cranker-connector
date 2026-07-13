@@ -9,9 +9,15 @@ import java.util.function.Function;
 
 public class TestCrankerRouterBuilder {
     private final CrankerRouterBuilder delegate = CrankerRouterBuilder.crankerRouter();
+    private boolean http2 = true;
 
     public static TestCrankerRouterBuilder crankerRouter() {
         return new TestCrankerRouterBuilder();
+    }
+
+    public TestCrankerRouterBuilder withHttp2(boolean http2) {
+        this.http2 = http2;
+        return this;
     }
 
     public TestCrankerRouterBuilder withDiscardClientForwardedHeaders(boolean discardClientForwardedHeaders) {
@@ -138,7 +144,8 @@ public class TestCrankerRouterBuilder {
                 return new com.hsbc.cranker.mucranker.RustCrankerRouter(
                     ipValidator, discardClientForwardedHeaders, sendLegacyForwardedHeaders, viaValue, doNotProxyHeaders,
                     maxWaitInMillis, pingAfterWriteMillis, idleReadTimeoutMills, routesKeepTimeMillis,
-                    completionListeners, routeResolver, supportedCrankerProtocol, clientIpProvider
+                    completionListeners, routeResolver, supportedCrankerProtocol, clientIpProvider,
+                    this.http2
                 );
             } catch (Exception e) {
                 throw new RuntimeException("Failed to construct RustCrankerRouter", e);
