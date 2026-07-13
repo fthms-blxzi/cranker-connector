@@ -66,7 +66,11 @@ public class RouterSupplierTest extends BaseEndToEndTest {
     }
 
     @RepeatedTest(3)
-    @DisabledIf("scaffolding.RustTestHelper#isRustMode") // FIXME: Stuck in rust mode
+    @DisabledIf(value = "scaffolding.RustTestHelper#isRustMode",
+        disabledReason = "Disabled in Rust mode because the Rust router does not immediately clean up V3 routes on deregistration" +
+            "(keeping them active during the grace period and returning 503 instead of 404). This causes" +
+            "assertEventually's repeated 100 retries to block for 5 seconds each, hanging the test."
+    )
     public void routersCanBeDynamicallyAddedAndRemoved(RepetitionInfo repetitionInfo) throws Exception {
 
         final AtomicReference<RouterEventListener.ChangeData> changeData = new AtomicReference<>();
