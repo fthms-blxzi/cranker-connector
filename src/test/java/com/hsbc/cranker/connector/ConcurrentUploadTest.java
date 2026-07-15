@@ -37,6 +37,7 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
 
     @BeforeEach
     void setUp(RepetitionInfo repetitionInfo) {
+        setUpDefault();
         clientExecutor = java.util.concurrent.Executors.newFixedThreadPool(20);
         localClient = HttpUtils.createHttpClientBuilder(true)
             .executor(clientExecutor)

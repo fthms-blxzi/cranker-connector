@@ -42,6 +42,7 @@ public class CrankerConnectorTest extends BaseEndToEndTest {
 
     @BeforeEach
     void setUp(RepetitionInfo repetitionInfo) {
+        setUpDefault();
         final List<String> preferredProtocols = preferredProtocols(repetitionInfo);
         connector = CrankerConnectorBuilder.connector()
             .withPreferredProtocols(preferredProtocols)

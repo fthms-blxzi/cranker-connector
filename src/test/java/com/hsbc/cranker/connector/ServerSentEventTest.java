@@ -56,33 +56,25 @@ public class ServerSentEventTest extends BaseEndToEndTest {
             .withSupportedCrankerProtocols(List.of("cranker_3.0", "cranker_1.0"))
             .withHttp2(false)
             .start();
-        try {
-            this.router = httpsServer()
-                .addHandler(crankerRouter.createRegistrationHandler())
-                .addHandler(crankerRouter.createHttpHandler())
-                .withHttp2Config(Http2ConfigBuilder.http2Config().enabled(false))
-                .start();
+        this.router = httpsServer()
+            .addHandler(crankerRouter.createRegistrationHandler())
+            .addHandler(crankerRouter.createHttpHandler())
+            .withHttp2Config(Http2ConfigBuilder.http2Config().enabled(false))
+            .start();
 
-            this.connector = startConnectorAndWaitForRegistration(crankerRouter, "*", targetServer,
-                preferredProtocols(repetitionInfo), 2, router);
+        this.connector = startConnectorAndWaitForRegistration(crankerRouter, "*", targetServer,
+            preferredProtocols(repetitionInfo), 2, router);
 
-            this.client = SseTestClient.startSse(router.uri().resolve("/sse/counter"));
-            this.client.waitUntilClose(5, TimeUnit.SECONDS);
+        this.client = SseTestClient.startSse(router.uri().resolve("/sse/counter"));
+        this.client.waitUntilClose(5, TimeUnit.SECONDS);
 
-            assertThat(this.client.getMessages(), equalTo(Arrays.asList(
-                "onOpen:",
-                "onEvent: id=null, type=null, data=Number 0",
-                "onEvent: id=null, type=null, data=Number 1",
-                "onEvent: id=null, type=null, data=Number 2",
-                "onClosed:"
-            )));
-        } finally {
-            boolean isRustMode = scaffolding.RustTestHelper.isRustMode();
-            if (isRustMode && crankerRouter != null) {
-                swallowException(crankerRouter::stop);
-                this.crankerRouter = null;
-            }
-        }
+        assertThat(this.client.getMessages(), equalTo(Arrays.asList(
+            "onOpen:",
+            "onEvent: id=null, type=null, data=Number 0",
+            "onEvent: id=null, type=null, data=Number 1",
+            "onEvent: id=null, type=null, data=Number 2",
+            "onClosed:"
+        )));
     }
 
     @Test
@@ -127,33 +119,25 @@ public class ServerSentEventTest extends BaseEndToEndTest {
             .withSupportedCrankerProtocols(List.of("cranker_3.0", "cranker_1.0"))
             .withHttp2(false)
             .start();
-        try {
-            this.router = httpsServer()
-                .addHandler(crankerRouter.createRegistrationHandler())
-                .addHandler(crankerRouter.createHttpHandler())
-                .withHttp2Config(Http2ConfigBuilder.http2Config().enabled(false))
-                .start();
+        this.router = httpsServer()
+            .addHandler(crankerRouter.createRegistrationHandler())
+            .addHandler(crankerRouter.createHttpHandler())
+            .withHttp2Config(Http2ConfigBuilder.http2Config().enabled(false))
+            .start();
 
-            this.connector = startConnectorAndWaitForRegistration(crankerRouter, "*", targetServer,
-                preferredProtocols(repetitionInfo), 2, router);
+        this.connector = startConnectorAndWaitForRegistration(crankerRouter, "*", targetServer,
+            preferredProtocols(repetitionInfo), 2, router);
 
-            this.client = SseTestClient.startSse(router.uri().resolve("/sse/counter"));
-            this.client.waitUntilError(100, TimeUnit.SECONDS);
+        this.client = SseTestClient.startSse(router.uri().resolve("/sse/counter"));
+        this.client.waitUntilError(100, TimeUnit.SECONDS);
 
-            assertThat(this.client.getMessages(), contains(
-                equalTo("onOpen:"),
-                equalTo("onEvent: id=null, type=null, data=Number 0"),
-                equalTo("onEvent: id=null, type=null, data=Number 1"),
-                equalTo("onEvent: id=null, type=null, data=Number 2"),
-                startsWith("onFailure: message=")
-            ));
-        } finally {
-            boolean isRustMode = scaffolding.RustTestHelper.isRustMode();
-            if (isRustMode && crankerRouter != null) {
-                swallowException(crankerRouter::stop);
-                this.crankerRouter = null;
-            }
-        }
+        assertThat(this.client.getMessages(), contains(
+            equalTo("onOpen:"),
+            equalTo("onEvent: id=null, type=null, data=Number 0"),
+            equalTo("onEvent: id=null, type=null, data=Number 1"),
+            equalTo("onEvent: id=null, type=null, data=Number 2"),
+            startsWith("onFailure: message=")
+        ));
     }
 
 }

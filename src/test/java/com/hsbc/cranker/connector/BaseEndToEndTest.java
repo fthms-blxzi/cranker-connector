@@ -30,7 +30,15 @@ public class BaseEndToEndTest {
 
     protected final HttpClient testClient = HttpUtils.createHttpClientBuilder(true).build();
 
-    protected CrankerRouter crankerRouter = buildRouter();
+    protected CrankerRouter crankerRouter;
+    protected MuServer registrationServer;
+    protected MuServer crankerServer;
+
+    protected void setUpDefault() {
+        this.crankerRouter = buildRouter();
+        this.registrationServer = startRegistrationServer(0);
+        this.crankerServer = startCrankerServer(0);
+    }
 
     private static CrankerRouter buildRouter() {
         boolean isRust = scaffolding.RustTestHelper.isRustMode();
@@ -47,9 +55,6 @@ public class BaseEndToEndTest {
                 .start();
         }
     }
-
-    protected MuServer registrationServer = startRegistrationServer(0);
-    protected MuServer crankerServer = startCrankerServer(0);
 
     protected MuServer startCrankerServer(int port) {
         boolean isRust = scaffolding.RustTestHelper.isRustMode();
