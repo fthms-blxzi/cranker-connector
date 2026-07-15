@@ -28,8 +28,8 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
     private volatile MuHandler handler = (request, response) -> false;
 
     protected MuServer targetServer = httpServer()
-            .addHandler((request, response) -> handler.handle(request, response))
-            .start();
+        .addHandler((request, response) -> handler.handle(request, response))
+        .start();
 
     private CrankerConnector connector;
     private java.util.concurrent.ExecutorService clientExecutor;
@@ -39,24 +39,24 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
     void setUp(RepetitionInfo repetitionInfo) {
         clientExecutor = java.util.concurrent.Executors.newFixedThreadPool(20);
         localClient = HttpUtils.createHttpClientBuilder(true)
-                .executor(clientExecutor)
-                .build();
+            .executor(clientExecutor)
+            .build();
 
         connector = CrankerConnectorBuilder.connector()
-                .withPreferredProtocols(preferredProtocols(repetitionInfo))
-                .withHttpClient(CrankerConnectorBuilder.createHttpClient(true).build())
-                .withRouterUris(RegistrationUriSuppliers.fixedUris(registrationUri(registrationServer.uri())))
-                .withRoute("upload-service")
-                .withTarget(targetServer.uri())
-                .withProxyEventListener(new ProxyEventListener() {
-                    @Override
-                    public void onProxyError(HttpRequest request, Throwable error) {
-                        log.warn("onProxyError, request=" + request, error);
-                    }
-                })
-                .withComponentName("cranker-connector-unit-test")
-                .withSlidingWindowSize(10)
-                .start();
+            .withPreferredProtocols(preferredProtocols(repetitionInfo))
+            .withHttpClient(CrankerConnectorBuilder.createHttpClient(true).build())
+            .withRouterUris(RegistrationUriSuppliers.fixedUris(registrationUri(registrationServer.uri())))
+            .withRoute("upload-service")
+            .withTarget(targetServer.uri())
+            .withProxyEventListener(new ProxyEventListener() {
+                @Override
+                public void onProxyError(HttpRequest request, Throwable error) {
+                    log.warn("onProxyError, request=" + request, error);
+                }
+            })
+            .withComponentName("cranker-connector-unit-test")
+            .withSlidingWindowSize(10)
+            .start();
 
         waitForRegistration("upload-service", connector.connectorId(), 2, crankerRouter);
     }
@@ -94,9 +94,9 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
                 try {
                     URI uri = crankerServer.uri().resolve("/upload-service/?task=" + finalI);
                     HttpResponse<String> resp = localClient.send(HttpRequest.newBuilder()
-                            .method("POST", HttpRequest.BodyPublishers.ofString(body))
-                            .uri(uri)
-                            .build(), HttpResponse.BodyHandlers.ofString());
+                        .method("POST", HttpRequest.BodyPublishers.ofString(body))
+                        .uri(uri)
+                        .build(), HttpResponse.BodyHandlers.ofString());
                     responses.add(resp);
                 } catch (Exception e) {
                     log.error("Concurrent request error", e);

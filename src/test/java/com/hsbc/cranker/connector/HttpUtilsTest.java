@@ -5,7 +5,6 @@ import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
 import org.junit.jupiter.api.Test;
 
-import javax.net.ssl.SSLHandshakeException;
 import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;

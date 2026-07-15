@@ -81,7 +81,7 @@ class CrankerConnectorBuilderTest {
     @RepeatedTest(3)
     void testMaxHeadersSize_exception(RepetitionInfo repetitionInfo) throws IOException, InterruptedException {
 
-        setupServerForMaxHeaders(40000,  preferredProtocols(repetitionInfo));
+        setupServerForMaxHeaders(40000, preferredProtocols(repetitionInfo));
 
         final String bigHeader = "b".repeat(58000); // test header size from 2000 to 20000
 

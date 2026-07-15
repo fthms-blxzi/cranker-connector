@@ -1,7 +1,6 @@
 package com.hsbc.cranker.mucranker;
 
 import io.muserver.MuHandler;
-import scaffolding.RustTestHelper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -46,20 +45,20 @@ public class RustCrankerRouter implements CrankerRouter {
     private final java.util.function.Function<io.muserver.MuRequest, String> clientIpProvider;
 
     public RustCrankerRouter(
-            IPValidator ipValidator,
-            boolean discardClientForwardedHeaders,
-            boolean sendLegacyForwardedHeaders,
-            String viaValue,
-            Set<String> doNotProxyHeaders,
-            long maxWaitInMillis,
-            long pingAfterWriteMillis,
-            long idleReadTimeoutMills,
-            long routesKeepTimeMillis,
-            List<ProxyListener> completionListeners,
-            RouteResolver routeResolver,
-            List<String> supportedCrankerProtocol,
-            java.util.function.Function<io.muserver.MuRequest, String> clientIpProvider,
-            boolean http2
+        IPValidator ipValidator,
+        boolean discardClientForwardedHeaders,
+        boolean sendLegacyForwardedHeaders,
+        String viaValue,
+        Set<String> doNotProxyHeaders,
+        long maxWaitInMillis,
+        long pingAfterWriteMillis,
+        long idleReadTimeoutMills,
+        long routesKeepTimeMillis,
+        List<ProxyListener> completionListeners,
+        RouteResolver routeResolver,
+        List<String> supportedCrankerProtocol,
+        java.util.function.Function<io.muserver.MuRequest, String> clientIpProvider,
+        boolean http2
     ) {
         this.regPort = findFreePort();
         this.visitPort = this.regPort;
@@ -82,21 +81,27 @@ public class RustCrankerRouter implements CrankerRouter {
         try {
             javax.net.ssl.TrustManager[] trustAllCerts = new javax.net.ssl.TrustManager[]{
                 new javax.net.ssl.X509TrustManager() {
-                    public java.security.cert.X509Certificate[] getAcceptedIssuers() { return null; }
-                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
-                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                        return null;
+                    }
+
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                    }
+
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                    }
                 }
             };
             javax.net.ssl.SSLContext sc = javax.net.ssl.SSLContext.getInstance("SSL");
             sc.init(null, trustAllCerts, new java.security.SecureRandom());
             client = HttpClient.newBuilder()
-                    .sslContext(sc)
-                    .connectTimeout(java.time.Duration.ofMillis(2000))
-                    .build();
+                .sslContext(sc)
+                .connectTimeout(java.time.Duration.ofMillis(2000))
+                .build();
         } catch (Exception e) {
             client = HttpClient.newBuilder()
-                    .connectTimeout(java.time.Duration.ofMillis(2000))
-                    .build();
+                .connectTimeout(java.time.Duration.ofMillis(2000))
+                .build();
         }
         this.httpClient = client;
     }
@@ -184,8 +189,8 @@ public class RustCrankerRouter implements CrankerRouter {
             while (System.currentTimeMillis() - start < 10000) {
                 try {
                     HttpResponse<String> response = httpClient.send(
-                            HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + regPort + "/health")).GET().build(),
-                            HttpResponse.BodyHandlers.ofString()
+                        HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + regPort + "/health")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString()
                     );
                     if (response.statusCode() == 200) {
                         started = true;
@@ -226,8 +231,8 @@ public class RustCrankerRouter implements CrankerRouter {
     public int idleConnectionCount() {
         try {
             HttpResponse<String> response = httpClient.send(
-                    HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + regPort + "/health/connectors")).GET().build(),
-                    HttpResponse.BodyHandlers.ofString()
+                HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + regPort + "/health/connectors")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
             );
             if (response.statusCode() == 200) {
                 JSONObject obj = new JSONObject(response.body());
@@ -258,9 +263,11 @@ public class RustCrankerRouter implements CrankerRouter {
 
     public static class RustRegistrationHandler implements MuHandler {
         public final RustCrankerRouter router;
+
         public RustRegistrationHandler(RustCrankerRouter router) {
             this.router = router;
         }
+
         @Override
         public boolean handle(io.muserver.MuRequest request, io.muserver.MuResponse response) {
             return false;
@@ -269,9 +276,11 @@ public class RustCrankerRouter implements CrankerRouter {
 
     public static class RustHttpHandler implements MuHandler {
         public final RustCrankerRouter router;
+
         public RustHttpHandler(RustCrankerRouter router) {
             this.router = router;
         }
+
         @Override
         public boolean handle(io.muserver.MuRequest request, io.muserver.MuResponse response) {
             return false;
@@ -282,8 +291,8 @@ public class RustCrankerRouter implements CrankerRouter {
     public RouterInfo collectInfo() {
         try {
             HttpResponse<String> response = httpClient.send(
-                    HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + regPort + "/health/connectors")).GET().build(),
-                    HttpResponse.BodyHandlers.ofString()
+                HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + regPort + "/health/connectors")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
             );
             if (response.statusCode() == 200) {
                 JSONObject obj = new JSONObject(response.body());
@@ -326,7 +335,7 @@ public class RustCrankerRouter implements CrankerRouter {
 
     @Override
     public void stop() {
-        if(process != null) {
+        if (process != null) {
             // 1. Handle all downstream descendant processes
             process.descendants().forEach(handle -> {
                 if (handle.isAlive()) {
@@ -356,21 +365,21 @@ public class RustCrankerRouter implements CrankerRouter {
         return new DarkModeManager() {
             private String toJson(DarkHost host) {
                 return new JSONObject()
-                        .put("address", host.address().getHostAddress())
-                        .put("dateEnabled", host.dateEnabled().toEpochMilli())
-                        .put("reason", host.reason() == null ? "" : host.reason())
-                        .toString();
+                    .put("address", host.address().getHostAddress())
+                    .put("dateEnabled", host.dateEnabled().toEpochMilli())
+                    .put("reason", host.reason() == null ? "" : host.reason())
+                    .toString();
             }
 
             private void sendPost(String path, String json) {
                 try {
                     httpClient.send(
-                            HttpRequest.newBuilder()
-                                    .uri(URI.create("http://127.0.0.1:" + regPort + path))
-                                    .header("Content-Type", "application/json")
-                                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                                    .build(),
-                            HttpResponse.BodyHandlers.discarding()
+                        HttpRequest.newBuilder()
+                            .uri(URI.create("http://127.0.0.1:" + regPort + path))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(json))
+                            .build(),
+                        HttpResponse.BodyHandlers.discarding()
                     );
                 } catch (Exception e) {
                     throw new RuntimeException(e);
@@ -391,8 +400,8 @@ public class RustCrankerRouter implements CrankerRouter {
             public Set<DarkHost> darkHosts() {
                 try {
                     HttpResponse<String> response = httpClient.send(
-                            HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + regPort + "/dark-mode/hosts")).GET().build(),
-                            HttpResponse.BodyHandlers.ofString()
+                        HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + regPort + "/dark-mode/hosts")).GET().build(),
+                        HttpResponse.BodyHandlers.ofString()
                     );
                     if (response.statusCode() == 200) {
                         JSONArray arr = new JSONArray(response.body());

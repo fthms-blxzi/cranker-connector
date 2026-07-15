@@ -161,7 +161,7 @@ public class RouterSupplierTest extends BaseEndToEndTest {
             .withRouterUpdateInterval(500, TimeUnit.MILLISECONDS)
             .start();
 
-        waitForRegistration(route, connector.connectorId(),1, router1);
+        waitForRegistration(route, connector.connectorId(), 1, router1);
         waitForRegistration(route, connector.connectorId(), 1, router2);
 
         assertThat(changeData.get().added(), hasSize(2));

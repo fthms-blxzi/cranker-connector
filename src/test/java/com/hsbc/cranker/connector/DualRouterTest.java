@@ -55,10 +55,10 @@ public class DualRouterTest extends BaseEndToEndTest {
     private CrankerConnector connector4;
 
     private static CrankerConnector startConnector(String targetServiceName,
-                                                                        MuServer target,
-                                                                        List<String> preferredProtocols,
-                                                                        int slidingWindowSize,
-                                                                        MuServer... registrationRouters) {
+                                                   MuServer target,
+                                                   List<String> preferredProtocols,
+                                                   int slidingWindowSize,
+                                                   MuServer... registrationRouters) {
         CrankerConnector connector = CrankerConnectorBuilder.connector()
             .withPreferredProtocols(preferredProtocols)
             .withHttpClient(CrankerConnectorBuilder.createHttpClient(true).build())
@@ -101,16 +101,16 @@ public class DualRouterTest extends BaseEndToEndTest {
             .addHandler(router2.createRegistrationHandler())
             .addHandler(router2.createHttpHandler()).start();
 
-        connector1 = startConnector("a", targetA1,preferredProtocols, 2, routerServer1, routerServer2);
+        connector1 = startConnector("a", targetA1, preferredProtocols, 2, routerServer1, routerServer2);
         waitForRegistration("a", connector1.connectorId(), 2, router1, router2);
 
-        connector2 = startConnector("b", targetB, preferredProtocols,2, routerServer1, routerServer2);
+        connector2 = startConnector("b", targetB, preferredProtocols, 2, routerServer1, routerServer2);
         waitForRegistration("b", connector2.connectorId(), 2, router1, router2);
 
-        connector3 = startConnector("a", targetA2, preferredProtocols,2, routerServer1, routerServer2);
+        connector3 = startConnector("a", targetA2, preferredProtocols, 2, routerServer1, routerServer2);
         waitForRegistration("a", connector3.connectorId(), 2, router1, router2);
 
-        connector4 = startConnector("*", targetCatchAll, preferredProtocols,2, routerServer1, routerServer2);
+        connector4 = startConnector("*", targetCatchAll, preferredProtocols, 2, routerServer1, routerServer2);
         waitForRegistration("*", connector4.connectorId(), 2, router1, router2);
 
     }

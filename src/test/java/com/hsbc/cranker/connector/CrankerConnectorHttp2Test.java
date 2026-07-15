@@ -62,7 +62,7 @@ public class CrankerConnectorHttp2Test {
             .addHandler(crankerRouter.createHttpHandler())
             .start();
 
-        this.connector = startConnectorAndWaitForRegistration(crankerRouter, "*", targetServer, preferredProtocols(repetitionInfo),2, this.routerServer);
+        this.connector = startConnectorAndWaitForRegistration(crankerRouter, "*", targetServer, preferredProtocols(repetitionInfo), 2, this.routerServer);
 
         HttpResponse<String> response = http2Client.send(HttpRequest.newBuilder()
             .uri(this.routerServer.uri().resolve("/test"))
