@@ -20,17 +20,30 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class RustCrankerRouter implements CrankerRouter {
 
-    private static int lastAssignedPort = 0;
-
-    private final Process process;
-    private final int regPort;
-    private final int visitPort;
+    private Process process;
+    private int regPort;
+    private int visitPort;
     private final HttpClient httpClient;
     private final boolean http2;
+
+    private final IPValidator ipValidator;
+    private final boolean discardClientForwardedHeaders;
+    private final boolean sendLegacyForwardedHeaders;
+    private final String viaValue;
+    private final Set<String> doNotProxyHeaders;
+    private final long maxWaitInMillis;
+    private final long pingAfterWriteMillis;
+    private final long idleReadTimeoutMills;
+    private final long routesKeepTimeMillis;
+    private final List<ProxyListener> completionListeners;
+    private final RouteResolver routeResolver;
+    private final List<String> supportedCrankerProtocol;
+    private final java.util.function.Function<io.muserver.MuRequest, String> clientIpProvider;
 
     public RustCrankerRouter(
             IPValidator ipValidator,
@@ -48,14 +61,22 @@ public class RustCrankerRouter implements CrankerRouter {
             java.util.function.Function<io.muserver.MuRequest, String> clientIpProvider,
             boolean http2
     ) {
-        int portToUse = lastAssignedPort;
-        if (portToUse == 0 || !isPortFree(portToUse)) {
-            portToUse = findFreePort();
-        }
-        lastAssignedPort = portToUse;
-        this.regPort = portToUse;
+        this.regPort = findFreePort();
         this.visitPort = this.regPort;
         this.http2 = http2;
+        this.ipValidator = ipValidator;
+        this.discardClientForwardedHeaders = discardClientForwardedHeaders;
+        this.sendLegacyForwardedHeaders = sendLegacyForwardedHeaders;
+        this.viaValue = viaValue;
+        this.doNotProxyHeaders = doNotProxyHeaders;
+        this.maxWaitInMillis = maxWaitInMillis;
+        this.pingAfterWriteMillis = pingAfterWriteMillis;
+        this.idleReadTimeoutMills = idleReadTimeoutMills;
+        this.routesKeepTimeMillis = routesKeepTimeMillis;
+        this.completionListeners = completionListeners;
+        this.routeResolver = routeResolver;
+        this.supportedCrankerProtocol = supportedCrankerProtocol;
+        this.clientIpProvider = clientIpProvider;
 
         HttpClient client = null;
         try {
@@ -78,7 +99,19 @@ public class RustCrankerRouter implements CrankerRouter {
                     .build();
         }
         this.httpClient = client;
+    }
 
+    public synchronized void setPorts(int port) {
+        if (this.process == null) {
+            this.regPort = port;
+            this.visitPort = port;
+        }
+    }
+
+    public synchronized void startOrGetProcess(boolean tlsMode, int maxHeaderSize) {
+        if (this.process != null) {
+            return;
+        }
         Process proc = null;
         try {
             String envExe = System.getenv("RUST_ROUTER_SERVER_EXE");
@@ -128,15 +161,22 @@ public class RustCrankerRouter implements CrankerRouter {
             cmd.add("--idle-read-timeout-ms");
             cmd.add(String.valueOf(idleReadTimeoutMills));
             cmd.add("--tls");
-            cmd.add(String.valueOf(RustTestHelper.isTlsMode()));
+            cmd.add(String.valueOf(tlsMode));
+            cmd.add("--log-level");
+            cmd.add("debug");
             cmd.add("--http2");
             cmd.add(String.valueOf(this.http2));
             cmd.add("--proxy-host-header");
             cmd.add(String.valueOf(!doNotProxyHeaders.contains("host")));
+            if (maxHeaderSize > 0) {
+                cmd.add("--max-header-size");
+                cmd.add(String.valueOf(maxHeaderSize));
+            }
 
             ProcessBuilder pb = new ProcessBuilder(cmd);
-            pb.redirectOutput(ProcessBuilder.Redirect.to(new File("target/rust-router-" + regPort + ".log")));
-            pb.redirectError(ProcessBuilder.Redirect.to(new File("target/rust-router-err-" + regPort + ".log")));
+            String routerId = UUID.randomUUID().toString();
+            pb.redirectOutput(ProcessBuilder.Redirect.to(new File("target/rust-router-" + routerId + ".log")));
+            pb.redirectError(ProcessBuilder.Redirect.to(new File("target/rust-router-err-" + routerId + ".log")));
             proc = pb.start();
             // Wait for it to start up
             long start = System.currentTimeMillis();
@@ -278,7 +318,8 @@ public class RustCrankerRouter implements CrankerRouter {
                 }
                 return new RouterInfoImpl(services, Collections.emptySet(), Collections.emptyMap());
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return new RouterInfoImpl(Collections.emptyList(), Collections.emptySet(), Collections.emptyMap());
     }

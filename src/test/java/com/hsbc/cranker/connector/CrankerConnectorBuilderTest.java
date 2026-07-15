@@ -79,25 +79,6 @@ class CrankerConnectorBuilderTest {
     }
 
     @RepeatedTest(3)
-    @DisabledIf(
-        value = "isRustAndTlsOff",
-        disabledReason =
-            "axum/tower::http cannot limit the header size so it will not return 431 in non-tls mode. " +
-                "But why in tls mode it works?" +
-                "Actually if comment each of the test they will pass, but put together they will get stuck."
-        // FIXME: The reason here could be complicated
-        //  First the crankerServer here disables http2 explicitly
-        //  so an http2 client will not upgrade to http2
-        //  Second the crankerServer.uri() at this time is plain
-        //  http scheme uri, so the jdk http client should
-        //  try with an upgrade: h2c header for plaintext http2
-        //  But since axum/tower doesn't support h2c mode
-        //  and its http2 behaviour is defined in use_http2
-        //  which controls alpn_protocols in the rustls config,
-        //  and the tls is not being used in the plain http scheme
-        //  uri, so the axum router just hang there?
-        //  Need further deeper investigation.
-    )
     void testMaxHeadersSize_exception(RepetitionInfo repetitionInfo) throws IOException, InterruptedException {
 
         setupServerForMaxHeaders(40000,  preferredProtocols(repetitionInfo));
@@ -139,10 +120,6 @@ class CrankerConnectorBuilderTest {
             .start();
 
         this.connector = startConnectorAndWaitForRegistration(crankerRouter, "*", targetServer, preferredProtocols, 2, this.crankerServer);
-    }
-
-    static boolean isRustAndTlsOff() {
-        return scaffolding.RustTestHelper.isRustMode() && !scaffolding.RustTestHelper.isTlsMode();
     }
 }
 

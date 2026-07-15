@@ -19,6 +19,7 @@ public class TestServerBuilder {
     private final boolean isHttps;
     private RustCrankerRouter rustRouterForReg = null;
     private RustCrankerRouter rustRouterForVisit = null;
+    private int maxHeadersSize = -1;
 
     private int requestedPort = 0;
 
@@ -32,15 +33,7 @@ public class TestServerBuilder {
     }
 
     public static TestServerBuilder httpsServer() {
-        if (RustTestHelper.isRustMode()) {
-            if (RustTestHelper.isTlsMode()) {
-                return new TestServerBuilder(MuServerBuilder.httpsServer(), true);
-            } else {
-                return new TestServerBuilder(MuServerBuilder.httpServer(), false);
-            }
-        } else {
-            return new TestServerBuilder(MuServerBuilder.httpsServer(), true);
-        }
+        return new TestServerBuilder(MuServerBuilder.httpsServer(), true);
     }
 
     public static TestCrankerRouterBuilder crankerRouter() {
@@ -76,7 +69,7 @@ public class TestServerBuilder {
     public TestServerBuilder withHttpsPort(int port) {
         this.requestedPort = port;
         if (RustTestHelper.isRustMode()) {
-            builder.withHttpPort(port);
+            builder.withHttpsPort(0);
         } else {
             builder.withHttpsPort(port);
         }
@@ -99,6 +92,7 @@ public class TestServerBuilder {
     }
 
     public TestServerBuilder withMaxHeadersSize(int maxHeadersSize) {
+        this.maxHeadersSize = maxHeadersSize;
         builder.withMaxHeadersSize(maxHeadersSize);
         return this;
     }
@@ -106,9 +100,32 @@ public class TestServerBuilder {
     public MuServer start() {
         boolean isRustMode = RustTestHelper.isRustMode();
         if (isRustMode && (rustRouterForReg != null || rustRouterForVisit != null)) {
+            int targetPort = -1;
+            if (requestedPort > 0) {
+                if (isHttps) {
+                    targetPort = requestedPort > 50000 ? requestedPort - 10000 : requestedPort + 10000;
+                } else {
+                    targetPort = requestedPort;
+                }
+            }
+            if (rustRouterForReg != null) {
+                if (targetPort > 0) {
+                    rustRouterForReg.setPorts(targetPort);
+                }
+                rustRouterForReg.startOrGetProcess(isHttps, maxHeadersSize);
+            }
+            if (rustRouterForVisit != null) {
+                if (targetPort > 0) {
+                    rustRouterForVisit.setPorts(targetPort);
+                }
+                rustRouterForVisit.startOrGetProcess(isHttps, maxHeadersSize);
+            }
             // In Rust mode we direct traffic directly to the Rust ports
             // without starting any JVM-side TCP proxy
             builder.withHttpPort(0);
+            if (isHttps) {
+                builder.withHttpsPort(0);
+            }
         }
         MuServer realServer = builder.start();
         if (isRustMode && (rustRouterForReg != null || rustRouterForVisit != null)) {
