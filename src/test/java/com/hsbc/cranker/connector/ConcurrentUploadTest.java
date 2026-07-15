@@ -16,6 +16,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.junit.jupiter.api.Assertions.*;
@@ -83,28 +84,22 @@ public class ConcurrentUploadTest extends BaseEndToEndTest {
         // in crankerRouter state before sending arbitrary client requests
         waitForRegistration("upload-service", connector.connectorId(), 2, crankerRouter);
 
-        Queue<String> orderTracker = new java.util.concurrent.ConcurrentLinkedQueue<>();
         Queue<HttpResponse<String>> responses = new ConcurrentLinkedQueue<>();
         CountDownLatch countDownLatch = new CountDownLatch(10);
-        java.util.concurrent.atomic.AtomicInteger requestOrder = new java.util.concurrent.atomic.AtomicInteger(0);
 
         final String body = "c".repeat(10 * 1000);
         for (int i = 0; i < 10; i++) {
             final int finalI = i;
             new Thread(() -> {
-                int order = requestOrder.incrementAndGet();
                 try {
                     URI uri = crankerServer.uri().resolve("/upload-service/?task=" + finalI);
-                    System.out.println("LAUNCHING REQUEST #" + order + " for task=" + finalI + " URI: " + uri);
                     HttpResponse<String> resp = localClient.send(HttpRequest.newBuilder()
                             .method("POST", HttpRequest.BodyPublishers.ofString(body))
                             .uri(uri)
                             .build(), HttpResponse.BodyHandlers.ofString());
-                    System.out.println("COMPLETED REQUEST #" + order + " for task=" + finalI + " with status=" + resp.statusCode());
                     responses.add(resp);
                 } catch (Exception e) {
                     log.error("Concurrent request error", e);
-                    System.err.println("FAILED REQUEST #" + order + " for task=" + finalI);
                 } finally {
                     countDownLatch.countDown();
                 }
