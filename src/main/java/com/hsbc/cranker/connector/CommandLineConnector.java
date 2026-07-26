@@ -33,6 +33,9 @@ public class CommandLineConnector {
                 domain = args[++i];
             } else if ("--route".equals(args[i])) {
                 route = args[++i];
+                if ("catch-all".equals(route)) {
+                    route = "*";
+                }
             } else if ("--target".equals(args[i])) {
                 target = args[++i];
             } else if ("--registration-uris".equals(args[i])) {
